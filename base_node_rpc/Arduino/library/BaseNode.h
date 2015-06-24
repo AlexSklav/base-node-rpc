@@ -3,7 +3,9 @@
 
 #include <stdint.h>
 #include <EEPROM.h>
-#include <remote_i2c_command.h>
+#include <RemoteI2cCommand.h>
+#include <SPI.h>
+#include <utility/twi.h>
 #include "Memory.h"
 #include "Array.h"
 #include "RPCBuffer.h"
@@ -95,6 +97,28 @@ public:
     Wire.beginTransmission(address);
     Wire.write(data.data, data.length);
     Wire.endTransmission();
+  }
+  UInt8Array i2c_send_command(uint8_t address, UInt8Array payload) {
+    i2c_write(address, payload);
+    return i2c_command_read(address);
+  }
+  UInt8Array i2c_command_read(uint8_t address) {
+    UInt8Array output = {sizeof(output_buffer), output_buffer};
+    uint8_t i2c_count = 0;
+
+    /* Request output size. */
+    output.length = Wire.requestFrom(address, (uint8_t)1);
+    i2c_count = Wire.read();
+
+    /* Request actual output. */
+    output.length = Wire.requestFrom(address, (uint8_t)i2c_count);
+
+    // Slave may send less than requested
+    for (int i = 0; i < i2c_count; i++) {
+      // receive a byte as character
+      output.data[i] = Wire.read();
+    }
+    return output;
   }
 };
 

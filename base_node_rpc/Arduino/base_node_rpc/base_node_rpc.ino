@@ -1,4 +1,5 @@
 #include "EEPROM.h"
+#include "SPI.h"
 #include "Wire.h"
 #include "Memory.h"
 #include "nanopb.h"
