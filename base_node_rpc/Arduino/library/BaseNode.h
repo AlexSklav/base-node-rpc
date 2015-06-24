@@ -3,7 +3,6 @@
 
 #include <stdint.h>
 #include <EEPROM.h>
-#include <RemoteI2cCommand.h>
 #include <SPI.h>
 #include <utility/twi.h>
 #include "Memory.h"
