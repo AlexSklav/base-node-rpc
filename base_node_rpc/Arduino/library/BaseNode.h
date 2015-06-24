@@ -22,11 +22,8 @@ public:
   static const uint16_t EEPROM__I2C_ADDRESS = 0x00;
   uint8_t i2c_address_;
   uint8_t output_buffer[128];
-  i2c_query i2c_query_;
 
   BaseNode() {
-    UInt8Array i2c_array = {sizeof(output_buffer), output_buffer};
-    i2c_query_ = i2c_query(i2c_array);
     i2c_address_ = EEPROM.read(EEPROM__I2C_ADDRESS);
     Wire.begin(i2c_address_);
   }
@@ -61,6 +58,7 @@ public:
     EEPROM.write(EEPROM__I2C_ADDRESS, i2c_address_);
     return address;
   }
+  uint16_t i2c_buffer_size() { return TWI_BUFFER_LENGTH; }
   UInt8Array i2c_scan() {
     UInt8Array output = {sizeof(output_buffer), output_buffer};
     int count = 0;
@@ -80,15 +78,21 @@ public:
     output.length = count;
     return output;
   }
+  int16_t i2c_available() { return Wire.available(); }
+  int8_t i2c_read_byte() { return Wire.read(); }
+  int8_t i2c_request_from(uint8_t address, uint8_t n_bytes_to_read) {
+    return Wire.requestFrom(address, n_bytes_to_read);
+  }
   UInt8Array i2c_read(uint8_t address, uint8_t n_bytes_to_read) {
     UInt8Array output = {sizeof(output_buffer), output_buffer};
     Wire.requestFrom(address, n_bytes_to_read);
     uint8_t n_bytes_read = 0;
     while (Wire.available()) {
-      output.data[n_bytes_read++] = Wire.read();
+      uint8_t value = Wire.read();
       if (n_bytes_read >= n_bytes_to_read) {
         break;
       }
+      output.data[n_bytes_read++] = value;
     }
     output.length = n_bytes_read;
     return output;
