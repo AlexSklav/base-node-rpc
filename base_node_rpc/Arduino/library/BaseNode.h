@@ -59,6 +59,43 @@ public:
     EEPROM.write(EEPROM__I2C_ADDRESS, i2c_address_);
     return address;
   }
+  UInt8Array i2c_scan() {
+    UInt8Array output = {sizeof(output_buffer), output_buffer};
+    int count = 0;
+
+    /* The I2C specification has reserved addresses in the ranges `0x1111XXX`
+     * and `0x0000XXX`.  See [here][1] for more details.
+     *
+     * [1]: http://www.totalphase.com/support/articles/200349176-7-bit-8-bit-and-10-bit-I2C-Slave-Addressing */
+    for (uint8_t i = 8; i < 120; i++) {
+      if (count >= output.length) { break; }
+      Wire.beginTransmission(i);
+      if (Wire.endTransmission() == 0) {
+        output.data[count++] = i;
+        delay(1);  // maybe unneeded?
+      }
+    }
+    output.length = count;
+    return output;
+  }
+  UInt8Array i2c_read(uint8_t address, uint8_t n_bytes_to_read) {
+    UInt8Array output = {sizeof(output_buffer), output_buffer};
+    Wire.requestFrom(address, n_bytes_to_read);
+    uint8_t n_bytes_read = 0;
+    while (Wire.available()) {
+      output.data[n_bytes_read++] = Wire.read();
+      if (n_bytes_read >= n_bytes_to_read) {
+        break;
+      }
+    }
+    output.length = n_bytes_read;
+    return output;
+  }
+  void i2c_write(uint8_t address, UInt8Array data) {
+    Wire.beginTransmission(address);
+    Wire.write(data.data, data.length);
+    Wire.endTransmission();
+  }
 };
 
 
