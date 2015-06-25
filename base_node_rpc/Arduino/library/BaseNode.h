@@ -9,11 +9,43 @@
 #include "Array.h"
 #include "RPCBuffer.h"
 #define BROADCAST_ADDRESS 0x00
+#ifndef P
+#define P(str) (strcpy_P(p_buffer_, PSTR(str)), p_buffer_)
+#endif
+
+
+#ifdef BASE_NODE__NAME
+const char NAME_[] PROGMEM = BASE_NODE__NAME;
+#else
+const char NAME_[] PROGMEM = "";
+#endif  // #ifdef BASE_NODE__NAME
+#ifdef BASE_NODE__MANUFACTURER
+const char MANUFACTURER_[] PROGMEM = BASE_NODE__MANUFACTURER;
+#else
+const char MANUFACTURER_[] PROGMEM = "";
+#endif
+#ifdef BASE_NODE__SOFTWARE_VERSION
+const char SOFTWARE_VERSION_[] PROGMEM = BASE_NODE__SOFTWARE_VERSION;
+#else
+const char SOFTWARE_VERSION_[] PROGMEM = "";
+#endif
+#ifdef BASE_NODE__URL
+const char URL_[] PROGMEM = BASE_NODE__URL;
+#else
+const char URL_[] PROGMEM = "";
+#endif
 
 
 /* Callback functions for slave device. */
 extern void i2c_receive_event(int byte_count);
 extern void i2c_request_event();
+
+
+inline UInt8Array prog_string(const char* str, UInt8Array array) {
+  strcpy_P((char *)array.data, str);
+  array.length = strlen_P(str);
+  return array;
+}
 
 
 class BaseNode {
@@ -134,6 +166,22 @@ public:
   void set_spi_clock_divider(uint8_t divider) { SPI.setClockDivider(divider); }
   void set_spi_data_mode(uint8_t mode) { SPI.setDataMode(mode); }
   uint8_t spi_transfer(uint8_t value) { return SPI.transfer(value); }
+  UInt8Array name() {
+    UInt8Array output = {sizeof(output_buffer), output_buffer};
+    return prog_string(NAME_, output);
+  }
+  UInt8Array manufacturer() {
+    UInt8Array output = {sizeof(output_buffer), output_buffer};
+    return prog_string(MANUFACTURER_, output);
+  }
+  UInt8Array software_version() {
+    UInt8Array output = {sizeof(output_buffer), output_buffer};
+    return prog_string(SOFTWARE_VERSION_, output);
+  }
+  UInt8Array url() {
+    UInt8Array output = {sizeof(output_buffer), output_buffer};
+    return prog_string(URL_, output);
+  }
 };
 
 
