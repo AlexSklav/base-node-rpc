@@ -43,7 +43,20 @@ def generate_python_code():
     input_classes = ['BaseNode', 'Node']
     input_headers = [lib_dir.joinpath('BaseNode.h'),
                      sketch_dir.joinpath('Node.h')]
-    write_code(input_headers, input_classes, output_file, get_python_code)
+    extra_header = ('from base_node_rpc.proxy import ProxyBase, I2cProxyMixin,'
+                    ' I2cSoftProxyMixin')
+    extra_footer = '''
+
+class I2cProxy(I2cProxyMixin, Proxy):
+    pass
+
+
+class I2cSoftProxy(I2cSoftProxyMixin, Proxy):
+    pass'''
+    f_python_code = lambda *args: get_python_code(*args,
+                                                  extra_header=extra_header,
+                                                  extra_footer=extra_footer)
+    write_code(input_headers, input_classes, output_file, f_python_code)
 
 
 @task
