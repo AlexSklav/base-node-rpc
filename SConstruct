@@ -6,7 +6,10 @@ from importlib import import_module
 from path_helpers import path
 import arduino_scons.auto_config
 from arduino_scons.git_util import GitUtil
-rpc_module = import_module(path('PROJECT_PREFIX').bytes().strip())
+
+PROJECT_PREFIX = [d for d in path('.').dirs()
+                  if d.joinpath('Arduino').isdir()][0].name
+rpc_module = import_module(PROJECT_PREFIX)
 
 
 def get_version_string():
