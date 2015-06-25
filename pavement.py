@@ -1,13 +1,14 @@
 from collections import OrderedDict
 import sys
 
-from paver.setuputils import setup, find_package_data
+from paver.setuputils import setup, find_package_data, install_distutils_tasks
 from paver.easy import options, path, environment
 
 sys.path.insert(0, '.')
 from base_node_rpc.pavement_base import *
 import version
 
+install_distutils_tasks()
 
 DEFAULT_ARDUINO_BOARDS = ['uno', 'mega2560']
 PROJECT_PREFIX = [d for d in path('.').dirs()
@@ -32,5 +33,5 @@ options(
                license='GPLv2',
                install_requires=['arduino_scons', 'nadamq', 'path_helpers',
                                  'arduino_helpers',
-                                 'wheeler.arduino_rpc>=1.0'],
+                                 'wheeler.arduino_rpc>=1.2'],
                packages=[PROJECT_PREFIX], package_data=package_files))
