@@ -48,17 +48,84 @@ inline UInt8Array prog_string(const char* str, UInt8Array array) {
 }
 
 
+namespace base_node_rpc {
+
+template <typename Obj, typename Fields>
+inline UInt8Array serialize_to_array(Obj &obj, Fields &fields, UInt8Array output) {
+  pb_ostream_t ostream = pb_ostream_from_buffer(output.data,
+                                                output.length);
+  bool ok = pb_encode(&ostream, fields, &obj);
+  if (ok) {
+    output.length = ostream.bytes_written;
+  } else {
+    output.length = 0;
+    output.data = NULL;
+  }
+  return output;
+}
+
+
+template <typename Fields, typename Obj>
+inline bool decode_from_array(UInt8Array input, Fields &fields, Obj &obj) {
+  pb_istream_t istream = pb_istream_from_buffer(input.data, input.length);
+  return pb_decode(&istream, fields, &obj);
+}
+
+
+inline UInt8Array eeprom_to_array(uint16_t address, UInt8Array output) {
+  uint16_t payload_size;
+
+  eeprom_read_block((void*)&payload_size, (void*)address, sizeof(uint16_t));
+  if (output.length < payload_size) {
+    output.length = 0;
+    output.data = NULL;
+  } else {
+    eeprom_read_block((void*)output.data, (void*)address + 2, payload_size);
+    output.length = payload_size;
+  }
+  return output;
+}
+
+} // namespace base_node_rpc
+
+
 class BaseNode {
 public:
   static const uint16_t EEPROM__I2C_ADDRESS = 0x00;
   uint8_t i2c_address_;
   uint8_t output_buffer[128];
+  uint8_t RETURN_CODE_;
 
-  BaseNode() {
+  BaseNode() : RETURN_CODE_(0) {
     i2c_address_ = EEPROM.read(EEPROM__I2C_ADDRESS);
     Wire.begin(i2c_address_);
   }
+  template <typename Obj, typename Fields>
+  UInt8Array serialize_obj(Obj &obj, Fields &fields) {
+    UInt8Array pb_buffer = {sizeof(output_buffer), output_buffer};
+    pb_buffer.length = sizeof(output_buffer);
+    pb_buffer = base_node_rpc::serialize_to_array(obj, fields, pb_buffer);
+    if (pb_buffer.data != NULL) {
+      RETURN_CODE_ = 0;
+    } else {
+      RETURN_CODE_ = 10;
+    }
+    return pb_buffer;
+  }
+  template <typename Obj, typename Fields>
+  bool decode_obj_from_eeprom(uint16_t address, Obj &obj, Fields &fields) {
+    UInt8Array pb_buffer = {sizeof(output_buffer), output_buffer};
+    pb_buffer.length = sizeof(output_buffer);
 
+    pb_buffer = base_node_rpc::eeprom_to_array(address, pb_buffer);
+    bool ok;
+    if (pb_buffer.data == NULL) {
+      ok = false;
+    } else {
+      ok = base_node_rpc::decode_from_array(pb_buffer, fields, obj);
+    }
+    return ok;
+  }
   uint32_t microseconds() { return micros(); }
   uint32_t milliseconds() { return millis(); }
   void delay_us(uint16_t us) { if (us > 0) { delayMicroseconds(us); } }
