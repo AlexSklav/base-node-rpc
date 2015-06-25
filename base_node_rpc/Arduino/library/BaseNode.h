@@ -2,7 +2,7 @@
 #define ___BASE_NODE__H___
 
 #include <stdint.h>
-#include <EEPROM.h>
+#include <avr/eeprom.h>
 #include <SPI.h>
 #include <utility/twi.h>
 #include "Memory.h"
@@ -166,6 +166,18 @@ public:
   void set_spi_clock_divider(uint8_t divider) { SPI.setClockDivider(divider); }
   void set_spi_data_mode(uint8_t mode) { SPI.setDataMode(mode); }
   uint8_t spi_transfer(uint8_t value) { return SPI.transfer(value); }
+
+  void update_eeprom_block(uint16_t address, UInt8Array data) {
+    eeprom_update_block((void*)data.data, (void*)address, data.length);
+  }
+
+  UInt8Array read_eeprom_block(uint16_t address, uint16_t n) {
+    UInt8Array output = {sizeof(output_buffer), output_buffer};
+    eeprom_read_block((void*)&output_buffer, (void*)address, n);
+    output.length = n;
+    return output;
+  }
+
   UInt8Array name() {
     UInt8Array output = {sizeof(output_buffer), output_buffer};
     return prog_string(NAME_, output);
