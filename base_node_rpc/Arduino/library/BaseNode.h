@@ -5,6 +5,8 @@
 #include <avr/eeprom.h>
 #include <SPI.h>
 #include <utility/twi.h>
+#include <pb_decode.h>
+#include <pb_encode.h>
 #include "Memory.h"
 #include "Array.h"
 #include "RPCBuffer.h"
@@ -91,15 +93,10 @@ inline UInt8Array eeprom_to_array(uint16_t address, UInt8Array output) {
 
 class BaseNode {
 public:
-  static const uint16_t EEPROM__I2C_ADDRESS = 0x00;
-  uint8_t i2c_address_;
   uint8_t output_buffer[128];
   uint8_t RETURN_CODE_;
 
-  BaseNode() : RETURN_CODE_(0) {
-    i2c_address_ = EEPROM.read(EEPROM__I2C_ADDRESS);
-    Wire.begin(i2c_address_);
-  }
+  BaseNode() : RETURN_CODE_(0) {}
   template <typename Obj, typename Fields>
   UInt8Array serialize_obj(Obj &obj, Fields &fields) {
     UInt8Array pb_buffer = {sizeof(output_buffer), output_buffer};
@@ -147,15 +144,7 @@ public:
   UInt32Array echo_array(UInt32Array array) { return array; }
   UInt8Array str_echo(UInt8Array msg) { return msg; }
 
-  int i2c_address() const { return i2c_address_; }
-  int set_i2c_address(uint8_t address) {
-    i2c_address_ = address;
-    Wire.begin(address);
-    // Write the value to the appropriate byte of the EEPROM.
-    // These values will remain there when the board is turned off.
-    EEPROM.write(EEPROM__I2C_ADDRESS, i2c_address_);
-    return address;
-  }
+  int set_i2c_address(uint8_t address) { Wire.begin(address); }
   uint16_t i2c_buffer_size() { return TWI_BUFFER_LENGTH; }
   UInt8Array i2c_scan() {
     UInt8Array output = {sizeof(output_buffer), output_buffer};

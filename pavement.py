@@ -1,5 +1,6 @@
 from collections import OrderedDict
 import sys
+from importlib import import_module
 
 from paver.setuputils import setup, find_package_data, install_distutils_tasks
 from paver.easy import options, path, environment
@@ -13,6 +14,7 @@ install_distutils_tasks()
 DEFAULT_ARDUINO_BOARDS = ['uno', 'mega2560']
 PROJECT_PREFIX = [d for d in path('.').dirs()
                   if d.joinpath('Arduino').isdir()][0].name
+rpc_module = import_module(PROJECT_PREFIX)
 VERSION = version.getVersion()
 URL='http://github.com/wheeler-microfluidics/%s.git' % PROJECT_PREFIX
 PROPERTIES = OrderedDict([('name', PROJECT_PREFIX),
@@ -22,6 +24,7 @@ package_files = find_package_data(package=PROJECT_PREFIX, where=PROJECT_PREFIX,
                                   only_in_packages=False)
 
 options(
+    rpc_module=rpc_module,
     PROPERTIES=PROPERTIES,
     DEFAULT_ARDUINO_BOARDS=DEFAULT_ARDUINO_BOARDS,
     setup=dict(name='wheeler.' + PROJECT_PREFIX,
