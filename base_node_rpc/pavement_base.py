@@ -64,7 +64,40 @@ class I2cSoftProxy(I2cSoftProxyMixin, Proxy):
 
 
 @task
-@needs('generate_command_processor_header', 'generate_rpc_buffer_header')
+def generate_config_c_code():
+    import nanopb_helpers as npb
+
+    sketch_dir = options.rpc_module.get_sketch_directory()
+    proto_path = sketch_dir.joinpath('config.proto').abspath()
+
+    if proto_path.isfile():
+        nano_pb_code = npb.compile_nanopb(proto_path)
+        c_output_base = sketch_dir.joinpath(options.PROPERTIES['name'] +
+                                            '_config_pb')
+        c_header_path = c_output_base + '.h'
+        (c_output_base + '.c').write_bytes(nano_pb_code['source']
+                                           .replace('{{ header_path }}',
+                                                    c_header_path.name))
+        c_header_path.write_bytes(nano_pb_code['header'])
+
+
+@task
+def generate_config_python_code():
+    import nanopb_helpers as npb
+    from path_helpers import path
+
+    sketch_dir = options.rpc_module.get_sketch_directory()
+    proto_path = sketch_dir.joinpath('config.proto').abspath()
+
+    if proto_path.isfile():
+        pb_code = npb.compile_pb(proto_path)
+        output_path = path(options.PROPERTIES['name']).joinpath('config.py')
+        output_path.write_bytes(pb_code['python'])
+
+
+@task
+@needs('generate_config_c_code', 'generate_config_python_code',
+       'generate_command_processor_header', 'generate_rpc_buffer_header')
 @cmdopts([('sconsflags=', 'f', 'Flags to pass to SCons.'),
           ('boards=', 'b', 'Comma-separated list of board names to compile '
            'for (e.g., `uno`).')])
