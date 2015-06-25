@@ -6,7 +6,8 @@ import base_node_rpc
 def generate_rpc_buffer_header():
     import arduino_rpc.rpc_data_frame as rpc_df
 
-    output_dir = path(options.PROPERTIES['name']).joinpath('Arduino', options.PROPERTIES['name'])
+    output_dir = (path(options.PROPERTIES['name'])
+                  .joinpath('Arduino', options.PROPERTIES['name']))
     rpc_df.generate_rpc_buffer_header(output_dir)
 
 
@@ -15,21 +16,22 @@ def generate_command_processor_header():
     from arduino_rpc.code_gen import write_code
     from arduino_rpc.rpc_data_frame import get_c_header_code
 
-    sketch_dir = path(options.PROPERTIES['name']).joinpath('Arduino', options.PROPERTIES['name'])
+    name = options.PROPERTIES['name']
+    sketch_dir = path(name).joinpath('Arduino', name)
     lib_dir = base_node_rpc.get_lib_directory()
     input_classes = ['BaseNode', 'Node']
     input_headers = [lib_dir.joinpath('BaseNode.h'),
                      sketch_dir.joinpath('Node.h')]
 
-    output_header = path(options.PROPERTIES['name']).joinpath('Arduino', options.PROPERTIES['name'],
-                                                  'NodeCommandProcessor.h')
+    output_header = path(name).joinpath('Arduino', name,
+                                        'NodeCommandProcessor.h')
     extra_header = '\n'.join(['#define BASE_NODE__%s  ("%s")' % (k.upper(), v)
                               for k, v in options.PROPERTIES.iteritems()])
-    f_get_code = lambda *args_: get_c_header_code(*(args_ +
-                                                    (options.PROPERTIES['name'], )),
+    f_get_code = lambda *args_: get_c_header_code(*(args_ + (name, )),
                                                   extra_header=extra_header)
 
-    write_code(input_headers, input_classes, output_header, f_get_code)
+    write_code(input_headers, input_classes, output_header, f_get_code,
+               '-I%s' % lib_dir.abspath())
 
 
 @task
@@ -37,9 +39,10 @@ def generate_python_code():
     from arduino_rpc.code_gen import write_code
     from arduino_rpc.rpc_data_frame import get_python_code
 
-    sketch_dir = path(options.PROPERTIES['name']).joinpath('Arduino', options.PROPERTIES['name'])
+    name = options.PROPERTIES['name']
+    sketch_dir = path(name).joinpath('Arduino', name)
     lib_dir = base_node_rpc.get_lib_directory()
-    output_file = path(options.PROPERTIES['name']).joinpath('node.py')
+    output_file = path(name).joinpath('node.py')
     input_classes = ['BaseNode', 'Node']
     input_headers = [lib_dir.joinpath('BaseNode.h'),
                      sketch_dir.joinpath('Node.h')]
@@ -56,7 +59,8 @@ class I2cSoftProxy(I2cSoftProxyMixin, Proxy):
     f_python_code = lambda *args: get_python_code(*args,
                                                   extra_header=extra_header,
                                                   extra_footer=extra_footer)
-    write_code(input_headers, input_classes, output_file, f_python_code)
+    write_code(input_headers, input_classes, output_file, f_python_code,
+               '-I%s' % lib_dir.abspath())
 
 
 @task
