@@ -82,7 +82,7 @@ inline UInt8Array eeprom_to_array(uint16_t address, UInt8Array output) {
     output.length = 0;
     output.data = NULL;
   } else {
-    eeprom_read_block((void*)output.data, (void*)address + 2, payload_size);
+    eeprom_read_block((void*)output.data, (void*)(address + 2), payload_size);
     output.length = payload_size;
   }
   return output;
