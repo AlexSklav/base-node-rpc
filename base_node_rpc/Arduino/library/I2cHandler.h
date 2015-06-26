@@ -5,8 +5,8 @@ namespace base_node {
 
 template <typename Packet>
 struct I2cHandler {
-  uint8_t processing_request = false;
-  uint8_t response_size_sent = false;
+  uint8_t processing_request;
+  uint8_t response_size_sent;
   Packet request_packet;
   Packet response_packet;
 
