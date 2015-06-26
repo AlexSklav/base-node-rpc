@@ -224,7 +224,11 @@ public:
   uint8_t spi_transfer(uint8_t value) { return SPI.transfer(value); }
 
   void update_eeprom_block(uint16_t address, UInt8Array data) {
-    eeprom_update_block((void*)data.data, (void*)address, data.length);
+    /* Use `eeprom_write_block` instead of `eeprom_update_block` since Arduino
+     * 1.0.5 avr-gcc does not include `eeprom_update_block` function. */
+    cli();
+    eeprom_write_block((void*)data.data, (void*)address, data.length);
+    sei();
   }
 
   UInt8Array read_eeprom_block(uint16_t address, uint16_t n) {
