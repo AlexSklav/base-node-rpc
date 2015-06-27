@@ -20,12 +20,14 @@ URL='http://github.com/wheeler-microfluidics/%s.git' % PROJECT_PREFIX
 PROPERTIES = OrderedDict([('name', PROJECT_PREFIX),
                           ('software_version', VERSION),
                           ('url', URL)])
+package_name = 'wheeler.' + PROJECT_PREFIX.replace('_', '-')
+print 'package_name', package_name
 
 options(
     rpc_module=rpc_module,
     PROPERTIES=PROPERTIES,
     DEFAULT_ARDUINO_BOARDS=DEFAULT_ARDUINO_BOARDS,
-    setup=dict(name='wheeler.' + PROJECT_PREFIX,
+    setup=dict(name=package_name,
                version=VERSION,
                description='Arduino RPC node packaged as Python package.',
                author='Christian Fobel',
@@ -35,4 +37,6 @@ options(
                install_requires=['arduino_scons', 'nadamq', 'path_helpers',
                                  'arduino_helpers',
                                  'wheeler.arduino_rpc>=1.2'],
-               packages=[PROJECT_PREFIX]))
+               # Install data listed in `MANIFEST.in`
+               include_package_data=True,
+               packages=[str(PROJECT_PREFIX)]))
