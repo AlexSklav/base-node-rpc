@@ -2,7 +2,7 @@ from collections import OrderedDict
 import sys
 from importlib import import_module
 
-from paver.setuputils import setup, find_package_data, install_distutils_tasks
+from paver.setuputils import setup, install_distutils_tasks
 from paver.easy import options, path, environment
 
 sys.path.insert(0, '.')
@@ -20,8 +20,6 @@ URL='http://github.com/wheeler-microfluidics/%s.git' % PROJECT_PREFIX
 PROPERTIES = OrderedDict([('name', PROJECT_PREFIX),
                           ('software_version', VERSION),
                           ('url', URL)])
-package_files = find_package_data(package=PROJECT_PREFIX, where=PROJECT_PREFIX,
-                                  only_in_packages=False)
 
 options(
     rpc_module=rpc_module,
@@ -37,4 +35,4 @@ options(
                install_requires=['arduino_scons', 'nadamq', 'path_helpers',
                                  'arduino_helpers',
                                  'wheeler.arduino_rpc>=1.2'],
-               packages=[PROJECT_PREFIX], package_data=package_files))
+               packages=[PROJECT_PREFIX]))
