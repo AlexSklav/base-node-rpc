@@ -7,3 +7,4 @@ include setup.py
 include PROJECT_PREFIX
 include SConstruct
 recursive-include base_node_rpc *
+recursive-exclude base_node_rpc *.pyc
