@@ -39,27 +39,6 @@ class I2cProxyMixin(object):
         self.address = i2c_address
 
     def _send_command(self, packet):
-        response = self.proxy.i2c_send_command(self.address,
-                                               map(ord, packet.data()))
+        response = self.proxy.i2c_request(self.address,
+                                          map(ord, packet.data()))
         return cPacket(data=response.tostring(), type_=PACKET_TYPES.DATA)
-
-
-class I2cSoftProxyMixin(object):
-    def __init__(self, i2c_address, proxy):
-        self.proxy = proxy
-        self.address = i2c_address
-        self._buffer_size = None
-
-    @property
-    def buffer_size(self):
-        if self._buffer_size is None:
-            self._buffer_size = self.proxy.i2c_buffer_size()
-        return self._buffer_size
-
-    def _send_command(self, packet):
-        if len(packet.data()) > self.buffer_size:
-            raise IOError('Packet size %s bytes too large.' %
-                          (len(packet.data()) - self.buffer_size))
-        self.proxy.i2c_write(self.address, map(ord, packet.data()))
-        return cPacket(data=self.proxy.i2c_command_read(self.address)
-                       .tostring(), type_=PACKET_TYPES.DATA)
