@@ -15,6 +15,12 @@
 #define P(str) (strcpy_P(p_buffer_, PSTR(str)), p_buffer_)
 #endif
 
+#ifndef eeprom_update_block
+/* Older versions of `avr-gcc` (like the one included with Arduino IDE 1.0.5)
+ * do not include the `eeprom_update_block` function. Use `eeprom_write_block`
+ * instead. */
+#define eeprom_write_block eeprom_update_block
+#endif
 
 #ifdef BASE_NODE__NAME
 const char NAME_[] PROGMEM = BASE_NODE__NAME;
@@ -224,10 +230,8 @@ public:
   uint8_t spi_transfer(uint8_t value) { return SPI.transfer(value); }
 
   void update_eeprom_block(uint16_t address, UInt8Array data) {
-    /* Use `eeprom_write_block` instead of `eeprom_update_block` since Arduino
-     * 1.0.5 avr-gcc does not include `eeprom_update_block` function. */
     cli();
-    eeprom_write_block((void*)data.data, (void*)address, data.length);
+    eeprom_update_block((void*)data.data, (void*)address, data.length);
     sei();
   }
 
