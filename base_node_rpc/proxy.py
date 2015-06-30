@@ -14,7 +14,8 @@ class ProxyBase(ap.ProxyBase):
         import pandas as pd
 
         return pd.Series(OrderedDict([(k, getattr(self, k)().tostring())
-                                      for k in ['name', 'manufacturer', 'url',
+                                      for k in ['base_node_software_version',
+                                                'name', 'manufacturer', 'url',
                                                 'software_version']
                                       if hasattr(self, k)]))
 

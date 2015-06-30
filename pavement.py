@@ -18,6 +18,7 @@ rpc_module = import_module(PROJECT_PREFIX)
 VERSION = version.getVersion()
 URL='http://github.com/wheeler-microfluidics/%s.git' % PROJECT_PREFIX
 PROPERTIES = OrderedDict([('name', PROJECT_PREFIX),
+                          ('base_node_version', VERSION),
                           ('software_version', VERSION),
                           ('url', URL)])
 package_name = 'wheeler.' + PROJECT_PREFIX.replace('_', '-')
@@ -47,15 +48,15 @@ def generate_library_main_header():
     library_header = (base_node_rpc.get_lib_directory()
                     .joinpath('BaseNodeRpc.h'))
     library_header.write_bytes('''
-    #ifndef ___BASE_NODE_RPC__H___
-    #define ___BASE_NODE_RPC__H___
+#ifndef ___BASE_NODE_RPC__H___
+#define ___BASE_NODE_RPC__H___
 
-    #ifndef BASE_NODE__SOFTWARE_VERSION
-    #define BASE_NODE__SOFTWARE_VERSION   "%s"
-    #endif
-    #include <BaseNode.h>
+#ifndef BASE_NODE__BASE_NODE_SOFTWARE_VERSION
+#define BASE_NODE__BASE_NODE_SOFTWARE_VERSION   "%s"
+#endif
+#include <BaseNode.h>
 
-    #endif  // #ifndef ___BASE_NODE_RPC__H___
+#endif  // #ifndef ___BASE_NODE_RPC__H___
     '''.strip() % options.PROPERTIES['software_version'])
 
 

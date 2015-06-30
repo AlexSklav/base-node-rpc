@@ -14,6 +14,12 @@
 #define P(str) (strcpy_P(p_buffer_, PSTR(str)), p_buffer_)
 #endif
 
+#ifdef BASE_NODE__BASE_NODE_SOFTWARE_VERSION
+const char BASE_NODE_SOFTWARE_VERSION_[] PROGMEM =
+  BASE_NODE__BASE_NODE_SOFTWARE_VERSION;
+#else
+const char BASE_NODE_SOFTWARE_VERSION_[] PROGMEM = "";
+#endif
 #ifdef BASE_NODE__NAME
 const char NAME_[] PROGMEM = BASE_NODE__NAME;
 #else
@@ -68,6 +74,9 @@ public:
   UInt32Array echo_array(UInt32Array array) { return array; }
   UInt8Array str_echo(UInt8Array msg) { return msg; }
 
+  UInt8Array base_node_software_version() {
+    return prog_string(BASE_NODE_SOFTWARE_VERSION_, get_buffer());
+  }
   UInt8Array name() { return prog_string(NAME_, get_buffer()); }
   UInt8Array manufacturer() {
     return prog_string(MANUFACTURER_, get_buffer());
