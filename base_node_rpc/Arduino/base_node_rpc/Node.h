@@ -2,11 +2,23 @@
 #define ___NODE__H___
 
 #include <BaseNode.h>
+#include <BaseNodeEeprom.h>
+#include <BaseNodeI2c.h>
+#include <BaseNodeSpi.h>
 
 
-class Node : public BaseNode {
+class Node :
+  public BaseNode, public BaseNodeEeprom, public BaseNodeI2c,
+  public BaseNodeSpi {
 public:
+  uint8_t output_buffer[128];
   Node() : BaseNode() {}
+  virtual UInt8Array get_buffer() {
+    UInt8Array output;
+    output.data = output_buffer;
+    output.length = sizeof(output_buffer);
+    return output;
+  }
   uint32_t test() { return 128; }
 };
 

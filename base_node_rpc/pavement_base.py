@@ -2,6 +2,18 @@ from paver.easy import task, needs, path, sh, cmdopts, options
 import base_node_rpc
 
 
+DEFAULT_BASE_CLASSES = ['BaseNodeEeprom', 'BaseNodeI2c', 'BaseNodeSpi']
+
+
+def get_base_classes_and_headers(options, lib_dir, sketch_dir):
+    base_classes = getattr(options, 'base_classes', DEFAULT_BASE_CLASSES)
+    input_classes = ['BaseNode'] + base_classes + ['Node']
+    input_headers = ([lib_dir.joinpath('BaseNode.h')] +
+                     [lib_dir.joinpath('%s.h' % c) for c in base_classes] +
+                     [sketch_dir.joinpath('Node.h')])
+    return input_classes, input_headers
+
+
 @task
 def generate_rpc_buffer_header():
     import arduino_rpc.rpc_data_frame as rpc_df
@@ -19,10 +31,10 @@ def generate_command_processor_header():
     name = options.PROPERTIES['name']
     sketch_dir = path(name).joinpath('Arduino', name)
     lib_dir = base_node_rpc.get_lib_directory()
-    input_classes = ['BaseNode', 'Node']
-    input_headers = [lib_dir.joinpath('BaseNode.h'),
-                     sketch_dir.joinpath('Node.h')]
 
+    input_classes, input_headers = get_base_classes_and_headers(options,
+                                                                lib_dir,
+                                                                sketch_dir)
     output_header = path(name).joinpath('Arduino', name,
                                         'NodeCommandProcessor.h')
     extra_header = '\n'.join(['#define BASE_NODE__%s  ("%s")' % (k.upper(), v)
@@ -43,19 +55,15 @@ def generate_python_code():
     sketch_dir = path(name).joinpath('Arduino', name)
     lib_dir = base_node_rpc.get_lib_directory()
     output_file = path(name).joinpath('node.py')
-    input_classes = ['BaseNode', 'Node']
-    input_headers = [lib_dir.joinpath('BaseNode.h'),
-                     sketch_dir.joinpath('Node.h')]
-    extra_header = ('from base_node_rpc.proxy import ProxyBase, I2cProxyMixin,'
-                    ' I2cSoftProxyMixin')
+    input_classes, input_headers = get_base_classes_and_headers(options,
+                                                                lib_dir,
+                                                                sketch_dir)
+    extra_header = ('from base_node_rpc.proxy import ProxyBase, I2cProxyMixin')
     extra_footer = '''
 
 class I2cProxy(I2cProxyMixin, Proxy):
     pass
-
-
-class I2cSoftProxy(I2cSoftProxyMixin, Proxy):
-    pass'''
+'''
     f_python_code = lambda *args: get_python_code(*args,
                                                   extra_header=extra_header,
                                                   extra_footer=extra_footer)

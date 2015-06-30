@@ -2,24 +2,16 @@
 #define ___BASE_NODE__H___
 
 #include <stdint.h>
-#include <avr/eeprom.h>
-#include <SPI.h>
 #include <utility/twi.h>
 #include <pb_decode.h>
 #include <pb_encode.h>
 #include "Memory.h"
-#include "Array.h"
+#include "BaseBuffer.h"
 #include "RPCBuffer.h"
-#define BROADCAST_ADDRESS 0x00
+
+
 #ifndef P
 #define P(str) (strcpy_P(p_buffer_, PSTR(str)), p_buffer_)
-#endif
-
-#ifndef eeprom_update_block
-/* Older versions of `avr-gcc` (like the one included with Arduino IDE 1.0.5)
- * do not include the `eeprom_update_block` function. Use `eeprom_write_block`
- * instead. */
-#define eeprom_write_block eeprom_update_block
 #endif
 
 #ifdef BASE_NODE__NAME
@@ -44,11 +36,6 @@ const char URL_[] PROGMEM = "";
 #endif
 
 
-/* Callback functions for slave device. */
-extern void i2c_receive_event(int byte_count);
-extern void i2c_request_event();
-
-
 inline UInt8Array prog_string(const char* str, UInt8Array array) {
   strcpy_P((char *)array.data, str);
   array.length = strlen_P(str);
@@ -56,84 +43,10 @@ inline UInt8Array prog_string(const char* str, UInt8Array array) {
 }
 
 
-namespace base_node_rpc {
-
-template <typename Obj, typename Fields>
-inline UInt8Array serialize_to_array(Obj &obj, Fields &fields, UInt8Array output) {
-  pb_ostream_t ostream = pb_ostream_from_buffer(output.data,
-                                                output.length);
-  bool ok = pb_encode(&ostream, fields, &obj);
-  if (ok) {
-    output.length = ostream.bytes_written;
-  } else {
-    output.length = 0;
-    output.data = NULL;
-  }
-  return output;
-}
-
-
-template <typename Fields, typename Obj>
-inline bool decode_from_array(UInt8Array input, Fields &fields, Obj &obj,
-                              bool init_default=false) {
-  pb_istream_t istream = pb_istream_from_buffer(input.data, input.length);
-  if (init_default) {
-    return pb_decode(&istream, fields, &obj);
-  } else {
-    return pb_decode_noinit(&istream, fields, &obj);
-  }
-}
-
-
-inline UInt8Array eeprom_to_array(uint16_t address, UInt8Array output) {
-  uint16_t payload_size;
-
-  eeprom_read_block((void*)&payload_size, (void*)address, sizeof(uint16_t));
-  if (output.length < payload_size) {
-    output.length = 0;
-    output.data = NULL;
-  } else {
-    eeprom_read_block((void*)output.data, (void*)(address + 2), payload_size);
-    output.length = payload_size;
-  }
-  return output;
-}
-
-} // namespace base_node_rpc
-
-
-class BaseNode {
+class BaseNode : public BufferIFace {
 public:
-  uint8_t output_buffer[128];
-  uint8_t RETURN_CODE_;
+  BaseNode() {}
 
-  BaseNode() : RETURN_CODE_(0) {}
-  template <typename Obj, typename Fields>
-  UInt8Array serialize_obj(Obj &obj, Fields &fields) {
-    UInt8Array pb_buffer = {sizeof(output_buffer), output_buffer};
-    pb_buffer.length = sizeof(output_buffer);
-    pb_buffer = base_node_rpc::serialize_to_array(obj, fields, pb_buffer);
-    if (pb_buffer.data != NULL) {
-      RETURN_CODE_ = 0;
-    } else {
-      RETURN_CODE_ = 10;
-    }
-    return pb_buffer;
-  }
-  template <typename Obj, typename Fields>
-  bool decode_obj_from_eeprom(uint16_t address, Obj &obj, Fields &fields) {
-    UInt8Array pb_buffer = {sizeof(output_buffer), output_buffer};
-    pb_buffer.length = sizeof(output_buffer);
-
-    pb_buffer = base_node_rpc::eeprom_to_array(address, pb_buffer);
-    bool ok;
-    if (pb_buffer.data == NULL) {
-      ok = false;
-    } else {
-      ok = base_node_rpc::decode_from_array(pb_buffer, fields, obj);
-    }
-    return ok;
-  }
   uint32_t microseconds() { return micros(); }
   uint32_t milliseconds() { return millis(); }
   void delay_us(uint16_t us) { if (us > 0) { delayMicroseconds(us); } }
@@ -155,114 +68,14 @@ public:
   UInt32Array echo_array(UInt32Array array) { return array; }
   UInt8Array str_echo(UInt8Array msg) { return msg; }
 
-  int set_i2c_address(uint8_t address) { Wire.begin(address); }
-  uint16_t i2c_buffer_size() { return TWI_BUFFER_LENGTH; }
-  UInt8Array i2c_scan() {
-    UInt8Array output = {sizeof(output_buffer), output_buffer};
-    int count = 0;
-
-    /* The I2C specification has reserved addresses in the ranges `0x1111XXX`
-     * and `0x0000XXX`.  See [here][1] for more details.
-     *
-     * [1]: http://www.totalphase.com/support/articles/200349176-7-bit-8-bit-and-10-bit-I2C-Slave-Addressing */
-    for (uint8_t i = 8; i < 120; i++) {
-      if (count >= output.length) { break; }
-      Wire.beginTransmission(i);
-      if (Wire.endTransmission() == 0) {
-        output.data[count++] = i;
-        delay(1);  // maybe unneeded?
-      }
-    }
-    output.length = count;
-    return output;
-  }
-  int16_t i2c_available() { return Wire.available(); }
-  int8_t i2c_read_byte() { return Wire.read(); }
-  int8_t i2c_request_from(uint8_t address, uint8_t n_bytes_to_read) {
-    return Wire.requestFrom(address, n_bytes_to_read);
-  }
-  UInt8Array i2c_read(uint8_t address, uint8_t n_bytes_to_read) {
-    UInt8Array output = {sizeof(output_buffer), output_buffer};
-    Wire.requestFrom(address, n_bytes_to_read);
-    uint8_t n_bytes_read = 0;
-    while (Wire.available()) {
-      uint8_t value = Wire.read();
-      if (n_bytes_read >= n_bytes_to_read) {
-        break;
-      }
-      output.data[n_bytes_read++] = value;
-    }
-    output.length = n_bytes_read;
-    return output;
-  }
-  void i2c_write(uint8_t address, UInt8Array data) {
-    Wire.beginTransmission(address);
-    Wire.write(data.data, data.length);
-    Wire.endTransmission();
-  }
-  UInt8Array i2c_send_command(uint8_t address, UInt8Array payload) {
-    i2c_write(address, payload);
-    return i2c_command_read(address);
-  }
-  UInt8Array i2c_command_read(uint8_t address) {
-    UInt8Array output = {sizeof(output_buffer), output_buffer};
-    uint8_t i2c_count = 0;
-
-    /* Request output size. */
-    output.length = Wire.requestFrom(address, (uint8_t)1);
-    i2c_count = Wire.read();
-
-    /* Request actual output. */
-    output.length = Wire.requestFrom(address, (uint8_t)i2c_count);
-
-    // Slave may send less than requested
-    for (int i = 0; i < i2c_count; i++) {
-      // receive a byte as character
-      output.data[i] = Wire.read();
-    }
-    return output;
-  }
-
-  void set_spi_bit_order(uint8_t order) {
-#ifdef __SAM3X8E__
-    SPI.setBitOrder((BitOrder)order);
-#else
-    SPI.setBitOrder(order);
-#endif
-  }
-  void set_spi_clock_divider(uint8_t divider) { SPI.setClockDivider(divider); }
-  void set_spi_data_mode(uint8_t mode) { SPI.setDataMode(mode); }
-  uint8_t spi_transfer(uint8_t value) { return SPI.transfer(value); }
-
-  void update_eeprom_block(uint16_t address, UInt8Array data) {
-    cli();
-    eeprom_update_block((void*)data.data, (void*)address, data.length);
-    sei();
-  }
-
-  UInt8Array read_eeprom_block(uint16_t address, uint16_t n) {
-    UInt8Array output = {sizeof(output_buffer), output_buffer};
-    eeprom_read_block((void*)&output_buffer, (void*)address, n);
-    output.length = n;
-    return output;
-  }
-
-  UInt8Array name() {
-    UInt8Array output = {sizeof(output_buffer), output_buffer};
-    return prog_string(NAME_, output);
-  }
+  UInt8Array name() { return prog_string(NAME_, get_buffer()); }
   UInt8Array manufacturer() {
-    UInt8Array output = {sizeof(output_buffer), output_buffer};
-    return prog_string(MANUFACTURER_, output);
+    return prog_string(MANUFACTURER_, get_buffer());
   }
   UInt8Array software_version() {
-    UInt8Array output = {sizeof(output_buffer), output_buffer};
-    return prog_string(SOFTWARE_VERSION_, output);
+    return prog_string(SOFTWARE_VERSION_, get_buffer());
   }
-  UInt8Array url() {
-    UInt8Array output = {sizeof(output_buffer), output_buffer};
-    return prog_string(URL_, output);
-  }
+  UInt8Array url() { return prog_string(URL_, get_buffer()); }
 };
 
 
