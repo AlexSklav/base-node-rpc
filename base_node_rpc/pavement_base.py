@@ -7,7 +7,8 @@ DEFAULT_BASE_CLASSES = ['BaseNodeEeprom', 'BaseNodeI2c', 'BaseNodeSpi']
 
 def get_base_classes_and_headers(options, lib_dir, sketch_dir):
     base_classes = getattr(options, 'base_classes', DEFAULT_BASE_CLASSES)
-    input_classes = ['BaseNode'] + base_classes + ['Node']
+    rpc_class = getattr(options, 'rpc_class', 'Node')
+    input_classes = ['BaseNode'] + base_classes + [rpc_class]
     input_headers = ([lib_dir.joinpath('BaseNode.h')] +
                      [lib_dir.joinpath('%s.h' % c) for c in base_classes] +
                      [sketch_dir.joinpath('Node.h')])

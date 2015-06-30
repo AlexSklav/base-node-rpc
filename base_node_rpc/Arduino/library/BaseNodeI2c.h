@@ -14,59 +14,6 @@ extern void i2c_receive_event(int byte_count);
 extern void i2c_request_event();
 
 
-namespace i2c_buffer {
-
-template <typename Parser>
-struct I2cReceiver {
-  Parser &parser_;
-  uint8_t source_addr_;
-
-  I2cReceiver(Parser &parser) : parser_(parser) { reset(); }
-
-  void operator()(int16_t byte_count) {
-    // Interpret first byte of each I2C message as source address of message.
-    uint8_t source_addr = Wire.read();
-    byte_count -= 1;
-    /* Received message from a new source address.
-     *
-     * TODO
-     * ====
-     *
-     * Strategies for dealing with this situation:
-     *  1. Discard messages that do not match current source address until
-     *     receiver is reset.
-     *  2. Reset parser and start parsing data from new source.
-     *  3. Maintain separate parser for each source address? */
-    if (source_addr_ == 0) { source_addr_ = source_addr; }
-
-    for (int i = 0; i < byte_count; i++) {
-      uint8_t value = Wire.read();
-      if (source_addr == source_addr_) { parser_.parse_byte(&value); }
-    }
-  }
-
-  void reset() {
-    parser_.reset();
-    source_addr_ = 0;
-  }
-
-  bool packet_ready() { return parser_.message_completed_; }
-  uint8_t packet_error() {
-    if (parser_.parse_error_) { return 'e'; }
-    return 0;
-  }
-
-  UInt8Array packet_read() {
-    UInt8Array output;
-    output.data = parser_.packet_->payload_buffer_;
-    output.length = parser_.packet_->payload_length_;
-    return output;
-  }
-};
-
-}  // namespace i2c_handler
-
-
 class BaseNodeI2c : public BufferIFace {
 public:
   void set_i2c_address(uint8_t address) { Wire.begin(address); }

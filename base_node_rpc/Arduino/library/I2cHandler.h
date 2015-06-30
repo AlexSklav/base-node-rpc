@@ -1,65 +1,140 @@
-#ifndef ___BASE_NODE__I2C_HANDLER__H___
-#define ___BASE_NODE__I2C_HANDLER__H___
+#include <NadaMQ.h>
+#include <BaseNodeI2c.h>
+#include <BaseHandler.h>
 
-namespace base_node {
 
-template <typename Packet>
-struct I2cHandler {
-  uint8_t processing_request;
-  uint8_t response_size_sent;
-  Packet request_packet;
-  Packet response_packet;
+namespace base_node_rpc {
 
-  I2cHandler() : processing_request(false), response_size_sent(false) {}
 
-  template <typename Processor>
-  void process_available(Processor &command_processor) {
-    if (processing_request) {
-      UInt8Array result = process_packet_with_processor(request_packet,
-                                                        command_processor);
-      if (result.data == NULL) {
-        /* There was an error encountered while processing the request. */
-        response_packet.type(Packet::packet_type::NACK);
-        response_packet.payload_length_ = 0;
-      } else {
-        response_packet.reset_buffer(result.length, result.data);
-        response_packet.payload_length_ = result.length;
-        response_packet.type(Packet::packet_type::DATA);
-      }
-      processing_request = false;
+struct i2c_write_packet {
+  uint8_t address_;
+
+  i2c_write_packet() : address_(0) {}
+
+  void operator()(UInt8Array data, uint8_t type_=Packet::packet_type::DATA) {
+    /*
+     * Write packet with `data` array contents as payload to specified I2C
+     * address.
+     *
+     * Notes
+     * -----
+     *
+     *  - Packet is sent as multiple transmissions on the I2C bus.
+     *  - Target I2C address is prepended to each transmission to allow the
+     *    target to identify the source of the message.
+     *  - The payload is sent in chunks as required (i.e., payloads greater
+     *    than the Wire library buffer size are supported). */
+    FixedPacket to_send;
+    to_send.type(type_);
+    to_send.reset_buffer(data.length, data.data);
+    to_send.payload_length_ = data.length;
+
+    // Set the CRC checksum of the packet based on the contents of the payload.
+    to_send.compute_crc();
+
+    stream_byte_type startflag[] = "|||";
+    const uint8_t source_addr = (TWAR & 0x0FE) >> 1;
+
+    // Send the packet header.
+    Wire.beginTransmission(address_);
+    serialize_any(Wire, source_addr);
+    Wire.write(startflag, 3);
+    serialize_any(Wire, to_send.iuid_);
+    serialize_any(Wire, type_);
+    serialize_any(Wire, static_cast<uint16_t>(to_send.payload_length_));
+    Wire.endTransmission();
+
+    while (to_send.payload_length_ > 0) {
+      uint16_t length = ((to_send.payload_length_ > TWI_BUFFER_LENGTH - 1)
+                         ? TWI_BUFFER_LENGTH - 1 : to_send.payload_length_);
+
+      /*  Send the next chunk of the payload up to the buffer size of the Wire
+       *  library (actually one less, since the first byte is used to label the
+       *  source address of the message). */
+      Wire.beginTransmission(address_);
+      serialize_any(Wire, source_addr);
+      Wire.write((stream_byte_type*)to_send.payload_buffer_,
+                  length);
+      Wire.endTransmission();
+
+      to_send.payload_buffer_ += length;
+      to_send.payload_length_ -= length;
     }
+
+    // Send CRC of packet.
+    Wire.beginTransmission(address_);
+    serialize_any(Wire, source_addr);
+    serialize_any(Wire, to_send.crc_);
+    Wire.endTransmission();
+  }
+};
+
+
+template <typename Parser>
+class I2cReceiver : public Receiver<Parser> {
+public:
+  typedef Receiver<Parser> base_type;
+  using base_type::parser_;
+
+  i2c_write_packet write_f_;
+
+  I2cReceiver(Parser &parser) : base_type(parser) { reset(); }
+
+  virtual void reset() {
+    base_type::reset();
+    write_f_.address_ = 0;
   }
 
-  void on_receive(int16_t byte_count) {
-    processing_request = true;
-    /* Record all bytes received on the i2c bus to a buffer.  The contents of
-    * this buffer will be forwarded to the local serial-stream. */
-    int i;
-    for (i = 0; i < byte_count; i++) {
-        request_packet.payload_buffer_[i] = Wire.read();
+  void operator()(int16_t byte_count) {
+    // Interpret first byte of each I2C message as source address of message.
+    uint8_t source_addr = Wire.read();
+    byte_count -= 1;
+    /* Received message from a new source address.
+     *
+     * TODO
+     * ====
+     *
+     * Strategies for dealing with this situation:
+     *  1. Discard messages that do not match current source address until
+     *     receiver is reset.
+     *  2. Reset parser and start parsing data from new source.
+     *  3. Maintain separate parser for each source address? */
+    if (write_f_.address_ == 0) {
+      write_f_.address_ = source_addr;
     }
-    request_packet.payload_length_ = i;
-    request_packet.type(Packet::packet_type::DATA);
-  }
 
-  void on_request() {
-    uint8_t byte_count = (uint8_t)response_packet.payload_length_;
-    /* There is a response from a previously received packet, so send it to the
-    * master of the i2c bus. */
-    if (!response_size_sent) {
-      if (processing_request) {
-        Wire.write(0xFF);
-      } else {
-        Wire.write(byte_count);
-        response_size_sent = true;
-      }
-    } else {
-      Wire.write(response_packet.payload_buffer_, byte_count);
-      response_size_sent = false;
+    for (int i = 0; i < byte_count; i++) {
+      uint8_t value = Wire.read();
+      if (source_addr == write_f_.address_) { parser_.parse_byte(&value); }
     }
   }
 };
 
-}  // namespace base_node
 
-#endif  // ifndef ___BASE_NODE__I2C_HANDLER__H___
+template <typename Receiver_, size_t PacketSize, uint32_t TIMEOUT_MS=5000>
+class I2cHandler : public Handler<Receiver_, PacketSize, TIMEOUT_MS> {
+public:
+  typedef Handler<Receiver_, PacketSize, TIMEOUT_MS> base_type;
+  using base_type::packet_read;
+  using base_type::packet_ready;
+  using base_type::packet_reset;
+  using base_type::receiver_;
+
+  I2cHandler() : base_type() {}
+
+  UInt8Array request(uint8_t address, UInt8Array data) {
+    packet_reset();
+
+    receiver_.write_f_.address_ = address;
+    receiver_.write_f_(data);
+    uint32_t start_time = millis();
+    while (TIMEOUT_MS > (millis() - start_time) && !packet_ready()) {}
+    UInt8Array result = packet_read();
+    // Reset packet state to prepare for incoming requests on I2C interface.
+    packet_reset();
+    return result;
+  }
+};
+
+
+} // namespace base_node_rpc
