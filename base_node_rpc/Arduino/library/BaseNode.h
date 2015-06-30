@@ -74,9 +74,14 @@ inline UInt8Array serialize_to_array(Obj &obj, Fields &fields, UInt8Array output
 
 
 template <typename Fields, typename Obj>
-inline bool decode_from_array(UInt8Array input, Fields &fields, Obj &obj) {
+inline bool decode_from_array(UInt8Array input, Fields &fields, Obj &obj,
+                              bool init_default=false) {
   pb_istream_t istream = pb_istream_from_buffer(input.data, input.length);
-  return pb_decode(&istream, fields, &obj);
+  if (init_default) {
+    return pb_decode(&istream, fields, &obj);
+  } else {
+    return pb_decode_noinit(&istream, fields, &obj);
+  }
 }
 
 
