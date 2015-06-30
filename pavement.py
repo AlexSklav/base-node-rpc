@@ -80,7 +80,21 @@ def build_arduino_library():
 
 
 @task
-@needs('build_arduino_library', 'pavement_base.sdist')
+@needs('generate_library_main_header', 'generate_config_c_code',
+       'generate_config_python_code', 'generate_command_processor_header',
+       'generate_rpc_buffer_header',
+       'base_node_rpc.pavement_base.build_firmware')
+def build_firmware():
+    '''
+    Override `pavement_base.build_firmware` to generate header with version
+    number.
+    '''
+    pass
+
+
+@task
+@needs('build_arduino_library', 'generate_setup', 'minilib', 'build_firmware',
+       'generate_python_code', 'setuptools.command.sdist')
 def sdist():
     """Overrides sdist to make sure that our setup.py is generated."""
     pass

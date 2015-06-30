@@ -19,7 +19,6 @@ public:
     output.length = sizeof(output_buffer);
     return output;
   }
-  uint32_t test() { return 128; }
 };
 
 
