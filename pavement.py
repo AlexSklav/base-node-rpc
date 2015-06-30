@@ -19,6 +19,7 @@ VERSION = version.getVersion()
 URL='http://github.com/wheeler-microfluidics/%s.git' % PROJECT_PREFIX
 PROPERTIES = OrderedDict([('name', PROJECT_PREFIX),
                           ('base_node_version', VERSION),
+                          ('manufacturer', 'Wheeler Lab'),
                           ('software_version', VERSION),
                           ('url', URL)])
 package_name = 'wheeler.' + PROJECT_PREFIX.replace('_', '-')
