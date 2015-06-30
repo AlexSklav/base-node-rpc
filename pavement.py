@@ -40,3 +40,46 @@ options(
                # Install data listed in `MANIFEST.in`
                include_package_data=True,
                packages=[str(PROJECT_PREFIX)]))
+
+
+@task
+def generate_library_main_header():
+    library_header = (base_node_rpc.get_lib_directory()
+                    .joinpath('BaseNodeRpc.h'))
+    library_header.write_bytes('''
+    #ifndef ___BASE_NODE_RPC__H___
+    #define ___BASE_NODE_RPC__H___
+
+    #ifndef BASE_NODE__SOFTWARE_VERSION
+    #define BASE_NODE__SOFTWARE_VERSION   "%s"
+    #endif
+    #include <BaseNode.h>
+
+    #endif  // #ifndef ___BASE_NODE_RPC__H___
+    '''.strip() % options.PROPERTIES['software_version'])
+
+
+@task
+@needs('generate_library_main_header')
+def build_arduino_library():
+    import os
+    import tarfile
+
+    package_lib_dir = path('base_node_rpc').joinpath('lib')
+    if not package_lib_dir.isdir():
+        package_lib_dir.mkdir()
+    tf = tarfile.TarFile.bz2open(package_lib_dir
+                                 .joinpath('BaseNodeRpc-Arduino.tar.gz'), 'w')
+    version_path = (base_node_rpc.get_lib_directory()
+                    .joinpath('RELEASE-VERSION'))
+    version_path.write_bytes(VERSION)
+    for s in base_node_rpc.get_lib_directory().walkfiles():
+        tf.add(s, os.path.join('BaseNodeRpc', os.path.basename(s)))
+    tf.close()
+
+
+@task
+@needs('build_arduino_library', 'pavement_base.sdist')
+def sdist():
+    """Overrides sdist to make sure that our setup.py is generated."""
+    pass

@@ -1,7 +1,7 @@
 #ifndef ___NODE__H___
 #define ___NODE__H___
 
-#include <BaseNode.h>
+#include <BaseNodeRpc.h>
 #include <BaseNodeEeprom.h>
 #include <BaseNodeI2c.h>
 #include <BaseNodeSpi.h>
