@@ -10,12 +10,12 @@ DEFAULT_METHODS_FILTER = lambda df: df[~(df.method_name
 
 def get_base_classes_and_headers(options, lib_dir, sketch_dir):
     base_classes = getattr(options, 'base_classes', DEFAULT_BASE_CLASSES)
-    rpc_class = getattr(options, 'rpc_class', 'Node')
-    input_classes = ['BaseNode'] + base_classes + [rpc_class]
+    rpc_classes = getattr(options, 'rpc_classes', ['Node'])
+    input_classes = ['BaseNode'] + base_classes + rpc_classes
     input_headers = ([lib_dir.joinpath('BaseNode.h')] +
                      [lib_dir.joinpath('%s.h' % c.split('<')[0])
                       for c in base_classes] +
-                     [sketch_dir.joinpath('Node.h')])
+                     len(rpc_classes) * [sketch_dir.joinpath('Node.h')])
     return input_classes, input_headers
 
 
