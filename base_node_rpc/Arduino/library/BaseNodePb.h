@@ -29,7 +29,7 @@ inline UInt8Array serialize_to_array(Obj &obj, Fields &fields,
 
 
 template <typename Fields, typename Obj>
-inline bool decode_from_array(UInt8Array input, Fields &fields, Obj &obj,
+inline bool decode_from_array(UInt8Array input, Fields const &fields, Obj &obj,
                               bool init_default=false) {
   pb_istream_t istream = pb_istream_from_buffer(input.data, input.length);
   if (init_default) {
@@ -46,13 +46,14 @@ inline bool decode_from_array(UInt8Array input, Fields &fields, Obj &obj,
 class BaseNodePb : public BufferIFace {
 public:
   template <typename Obj, typename Fields>
-  UInt8Array serialize_obj(Obj &obj, Fields &fields) {
+  UInt8Array serialize_obj(Obj &obj, Fields const &fields) {
     UInt8Array pb_buffer = get_buffer();
     pb_buffer = base_node_rpc::serialize_to_array(obj, fields, pb_buffer);
     return pb_buffer;
   }
   template <typename Obj, typename Fields>
-  bool decode_obj_from_eeprom(uint16_t address, Obj &obj, Fields &fields) {
+  bool decode_obj_from_eeprom(uint16_t address, Obj &obj,
+                              Fields const &fields) {
     UInt8Array pb_buffer = get_buffer();
 
     pb_buffer = base_node_rpc::eeprom_to_array(address, pb_buffer);

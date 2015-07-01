@@ -2,7 +2,6 @@
 #define ___BASE_NODE_SPI__H___
 
 
-#include <Wire.h>
 #include <SPI.h>
 
 
