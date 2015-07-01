@@ -7,7 +7,8 @@
 
 class BaseNodeI2cHandler {
 public:
-  base_node_rpc::i2c_handler_t i2c_handler_;
+  typedef base_node_rpc::i2c_handler_t handler_type;
+  handler_type i2c_handler_;
 
   UInt8Array i2c_request(uint8_t address, UInt8Array data) {
     return i2c_handler_.request(address, data);

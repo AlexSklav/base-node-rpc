@@ -6,7 +6,8 @@
 
 class BaseNodeSerialHandler {
 public:
-  base_node_rpc::serial_handler_t serial_handler_;
+  typedef base_node_rpc::serial_handler_t handler_type;
+  handler_type serial_handler_;
 };
 
 #endif  // #ifndef ___BASE_NODE_SERIAL_HANDLER__H___
