@@ -10,7 +10,8 @@ def get_base_classes_and_headers(options, lib_dir, sketch_dir):
     rpc_class = getattr(options, 'rpc_class', 'Node')
     input_classes = ['BaseNode'] + base_classes + [rpc_class]
     input_headers = ([lib_dir.joinpath('BaseNode.h')] +
-                     [lib_dir.joinpath('%s.h' % c) for c in base_classes] +
+                     [lib_dir.joinpath('%s.h' % c.split('<')[0])
+                      for c in base_classes] +
                      [sketch_dir.joinpath('Node.h')])
     return input_classes, input_headers
 
