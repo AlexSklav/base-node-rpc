@@ -1,5 +1,8 @@
+#ifndef ___I2C_HANDLER__H___
+#define ___I2C_HANDLER__H___
+
 #include <NadaMQ.h>
-#include <BaseNodeI2c.h>
+#include <Wire.h>
 #include <BaseHandler.h>
 
 
@@ -137,4 +140,10 @@ public:
 };
 
 
+typedef PacketParser<FixedPacket> parser_t;
+typedef I2cReceiver<parser_t> i2c_receiver_t;
+typedef I2cHandler<i2c_receiver_t, I2C_PACKET_SIZE> i2c_handler_t;
+
 } // namespace base_node_rpc
+
+#endif  // #ifndef ___I2C_HANDLER__H___

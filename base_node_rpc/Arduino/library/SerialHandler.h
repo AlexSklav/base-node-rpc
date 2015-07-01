@@ -1,3 +1,6 @@
+#ifndef ___SERIAL_HANDLER__H___
+#define ___SERIAL_HANDLER__H___
+
 #include <NadaMQ.h>
 #include <BaseHandler.h>
 
@@ -55,4 +58,10 @@ public:
 };
 
 
+typedef PacketParser<FixedPacket> parser_t;
+typedef SerialReceiver<parser_t> serial_receiver_t;
+typedef Handler<serial_receiver_t, PACKET_SIZE> serial_handler_t;
+
 } // namespace base_node_rpc
+
+#endif  // #ifndef ___SERIAL_HANDLER__H___
