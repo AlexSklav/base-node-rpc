@@ -37,8 +37,7 @@ options(
                url=URL,
                license='GPLv2',
                install_requires=['arduino_scons', 'nadamq', 'path_helpers',
-                                 'arduino_helpers', 'arduino-array',
-                                 'wheeler.arduino_rpc>=1.2'],
+                                 'wheeler.arduino_rpc>=1.5'],
                # Install data listed in `MANIFEST.in`
                include_package_data=True,
                packages=[str(PROJECT_PREFIX)]))
