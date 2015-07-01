@@ -29,6 +29,13 @@ inline UInt8Array eeprom_to_array(uint16_t address, UInt8Array output) {
   return output;
 }
 
+inline void array_to_eeprom(uint16_t address, UInt8Array data) {
+  cli();
+  eeprom_update_block((void*)&data.length, (void*)address, sizeof(uint16_t));
+  eeprom_update_block((void*)data.data, (void*)(address + 2), data.length);
+  sei();
+}
+
 } // namespace base_node_rpc
 
 
