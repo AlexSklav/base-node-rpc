@@ -3,6 +3,9 @@ import base_node_rpc
 
 
 DEFAULT_BASE_CLASSES = ['BaseNodeEeprom', 'BaseNodeI2c', 'BaseNodeSpi']
+DEFAULT_METHODS_FILTER = lambda df: df[~(df.method_name
+                                         .isin(['get_config_fields',
+                                                'get_state_fields']))].copy()
 
 
 def get_base_classes_and_headers(options, lib_dir, sketch_dir):
@@ -44,8 +47,9 @@ def generate_command_processor_header():
     f_get_code = lambda *args_: get_c_header_code(*(args_ + (name, )),
                                                   extra_header=extra_header)
 
+    methods_filter = getattr(options, 'methods_filter', DEFAULT_METHODS_FILTER)
     write_code(input_headers, input_classes, output_header, f_get_code,
-               '-I%s' % lib_dir.abspath())
+               '-I%s' % lib_dir.abspath(), methods_filter=methods_filter)
 
 
 @task
@@ -69,8 +73,9 @@ class I2cProxy(I2cProxyMixin, Proxy):
     f_python_code = lambda *args: get_python_code(*args,
                                                   extra_header=extra_header,
                                                   extra_footer=extra_footer)
+    methods_filter = getattr(options, 'methods_filter', DEFAULT_METHODS_FILTER)
     write_code(input_headers, input_classes, output_file, f_python_code,
-               '-I%s' % lib_dir.abspath())
+               '-I%s' % lib_dir.abspath(), methods_filter=methods_filter)
 
 
 @task
