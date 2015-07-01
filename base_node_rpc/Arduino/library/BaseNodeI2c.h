@@ -63,5 +63,4 @@ public:
     Wire.endTransmission();
   }
 };
-
 #endif  // #ifndef ___BASE_NODE_I2C__H___

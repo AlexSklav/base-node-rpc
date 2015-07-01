@@ -32,6 +32,7 @@ def generate_rpc_buffer_header():
 def generate_command_processor_header():
     from arduino_rpc.code_gen import write_code
     from arduino_rpc.rpc_data_frame import get_c_header_code
+    import arduino_array
 
     name = options.PROPERTIES['name']
     sketch_dir = path(name).joinpath('Arduino', name)
@@ -49,13 +50,15 @@ def generate_command_processor_header():
 
     methods_filter = getattr(options, 'methods_filter', DEFAULT_METHODS_FILTER)
     write_code(input_headers, input_classes, output_header, f_get_code,
-               '-I%s' % lib_dir.abspath(), methods_filter=methods_filter)
+               *['-I%s' % p for p in [lib_dir.abspath()] +
+                 arduino_array.get_includes()], methods_filter=methods_filter)
 
 
 @task
 def generate_python_code():
     from arduino_rpc.code_gen import write_code
     from arduino_rpc.rpc_data_frame import get_python_code
+    import arduino_array
 
     name = options.PROPERTIES['name']
     sketch_dir = path(name).joinpath('Arduino', name)
@@ -75,7 +78,8 @@ class I2cProxy(I2cProxyMixin, Proxy):
                                                   extra_footer=extra_footer)
     methods_filter = getattr(options, 'methods_filter', DEFAULT_METHODS_FILTER)
     write_code(input_headers, input_classes, output_file, f_python_code,
-               '-I%s' % lib_dir.abspath(), methods_filter=methods_filter)
+               *['-I%s' % p for p in [lib_dir.abspath()] +
+                 arduino_array.get_includes()], methods_filter=methods_filter)
 
 
 @task

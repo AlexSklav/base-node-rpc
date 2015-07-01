@@ -5,6 +5,7 @@
 #include <utility/twi.h>
 #include <pb_decode.h>
 #include <pb_encode.h>
+#include <Array.h>
 #include "Memory.h"
 #include "BaseBuffer.h"
 #include "RPCBuffer.h"
