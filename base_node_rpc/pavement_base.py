@@ -9,8 +9,17 @@ DEFAULT_METHODS_FILTER = lambda df: df[~(df.method_name
 
 
 def get_base_classes_and_headers(options, lib_dir, sketch_dir):
+    '''
+    Return ordered list of classes to scan for method discovery, along with a
+    corresponding list of the header file where each class may be found.
+
+     - Base classes refer to classes that are to be found in the
+       `base-node-rpc` library directory.
+     - rpc classes refer to classes found in the sketch directory.
+    '''
     base_classes = getattr(options, 'base_classes', DEFAULT_BASE_CLASSES)
     rpc_classes = getattr(options, 'rpc_classes', ['Node'])
+
     input_classes = ['BaseNode'] + base_classes + rpc_classes
     input_headers = ([lib_dir.joinpath('BaseNode.h')] +
                      [lib_dir.joinpath('%s.h' % c.split('<')[0])
@@ -20,6 +29,14 @@ def get_base_classes_and_headers(options, lib_dir, sketch_dir):
 
 
 def generate_validate_header(message_name, sketch_dir):
+    '''
+    If package has generated Python `config` module and a Protocol Buffer
+    message class type with the specified message name is defined, scan node
+    base classes for callback methods related to the message type.
+
+    For example, if the message name is `Config`, callbacks of the form
+    `on_config_<field name>_changed` will be matched.
+    '''
     from importlib import import_module
 
     from path_helpers import path
@@ -46,11 +63,11 @@ def generate_validate_header(message_name, sketch_dir):
                                                           input_classes,
                                                           message_type, *args)
 
-        message_name = message_type.DESCRIPTOR.name.lower()
         output_path = path(sketch_dir).joinpath('%s_%s_validate.h' %
-                                                (package_name, message_name))
-        write_handler_validator_header(output_path, package_name, message_name,
-                                       validator_code)
+                                                (package_name,
+                                                 message_name.lower()))
+        write_handler_validator_header(output_path, package_name,
+                                       message_name.lower(), validator_code)
 
 
 @task
