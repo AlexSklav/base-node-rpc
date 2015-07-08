@@ -1,3 +1,4 @@
+import sys
 from collections import OrderedDict
 
 import arduino_rpc.proxy as ap
@@ -23,7 +24,24 @@ class ProxyBase(ap.ProxyBase):
     def buffer_size(self):
         if self._buffer_size is None:
             self._buffer_bounds_check = False
-            self._buffer_size = self.max_payload_size()
+            payload_size_set = False
+            try:
+                max_i2c_payload_size = self.max_i2c_payload_size()
+                payload_size_set = True
+            except AttributeError:
+                max_i2c_payload_size = sys.maxint
+            try:
+                max_serial_payload_size = self.max_serial_payload_size()
+                payload_size_set = True
+            except AttributeError:
+                max_serial_payload_size = sys.maxint
+            if not payload_size_set:
+                raise IOError('Could not determine maximum packet payload '
+                              'size. Make sure at least one of the following '
+                              'methods is defined: `max_i2c_payload_size` '
+                              'method or `max_serial_payload_size`.')
+            self._buffer_size = min(max_serial_payload_size,
+                                    max_i2c_payload_size)
             self._buffer_bounds_check = True
         return self._buffer_size
 
