@@ -19,6 +19,40 @@ def get_base_classes_and_headers(options, lib_dir, sketch_dir):
     return input_classes, input_headers
 
 
+def generate_validate_header(message_name, sketch_dir):
+    from importlib import import_module
+
+    from path_helpers import path
+    import arduino_array
+    from .protobuf import (get_handler_validator_class_code,
+                           write_handler_validator_header)
+    from . import get_lib_directory
+
+    try:
+        config = import_module('.config', package=options.rpc_module.__name__)
+    except ImportError:
+        return
+
+    lib_dir = get_lib_directory()
+    if hasattr(config, message_name):
+        package_name = sketch_dir.name
+        input_classes, input_headers = get_base_classes_and_headers(options,
+                                                                    lib_dir,
+                                                                    sketch_dir)
+        message_type = getattr(config, message_name)
+        args = ['-I%s' % p for p in [lib_dir.abspath()] +
+                arduino_array.get_includes()]
+        validator_code = get_handler_validator_class_code(input_headers,
+                                                          input_classes,
+                                                          message_type, *args)
+
+        message_name = message_type.DESCRIPTOR.name.lower()
+        output_path = path(sketch_dir).joinpath('%s_%s_validate.h' %
+                                                (package_name, message_name))
+        write_handler_validator_header(output_path, package_name, message_name,
+                                       validator_code)
+
+
 @task
 def generate_rpc_buffer_header():
     import arduino_rpc.rpc_data_frame as rpc_df
@@ -115,7 +149,22 @@ def generate_config_python_code():
 
 
 @task
+@needs('generate_config_python_code')
+def generate_config_validate_header():
+    sketch_dir = options.rpc_module.get_sketch_directory()
+    generate_validate_header('Config', sketch_dir)
+
+
+@task
+@needs('generate_config_python_code')
+def generate_state_validate_header():
+    sketch_dir = options.rpc_module.get_sketch_directory()
+    generate_validate_header('State', sketch_dir)
+
+
+@task
 @needs('generate_config_c_code', 'generate_config_python_code',
+       'generate_config_validate_header', 'generate_state_validate_header',
        'generate_command_processor_header', 'generate_rpc_buffer_header')
 @cmdopts([('sconsflags=', 'f', 'Flags to pass to SCons.'),
           ('boards=', 'b', 'Comma-separated list of board names to compile '
