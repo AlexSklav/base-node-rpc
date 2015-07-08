@@ -185,6 +185,33 @@ def generate_state_validate_header():
 
 
 @task
+@cmdopts([('overwrite', 'f', 'Force overwrite')])
+def init_config():
+    '''
+    Write basic config protobuf definition to sketch directory
+    (`config.proto`).
+    '''
+    import jinja2
+    from . import get_lib_directory
+
+    overwrite = getattr(options, 'overwrite', False)
+
+    sketch_dir = options.rpc_module.get_sketch_directory()
+    lib_dir = get_lib_directory()
+
+    output_path = sketch_dir.joinpath('config.proto')
+    template = lib_dir.joinpath('config.protot').bytes()
+
+    if not output_path.isfile() or overwrite:
+        output = jinja2.Template(template).render(package=
+                                                  options.PROPERTIES['name'])
+        output_path.write_bytes(output)
+    else:
+        raise IOError('Output path exists.  Use `overwrite` to force '
+                      'overwrite.')
+
+
+@task
 @needs('generate_config_c_code', 'generate_config_python_code',
        'generate_config_validate_header', 'generate_state_validate_header',
        'generate_command_processor_header', 'generate_rpc_buffer_header')
