@@ -122,9 +122,14 @@ def generate_config_c_code():
 
     sketch_dir = options.rpc_module.get_sketch_directory()
     proto_path = sketch_dir.joinpath('config.proto').abspath()
+    options_path = sketch_dir.joinpath('config.options').abspath()
 
     if proto_path.isfile():
-        nano_pb_code = npb.compile_nanopb(proto_path)
+        if options_path.isfile():
+            kwargs = {'options_file': options_path}
+        else:
+            kwargs = {}
+        nano_pb_code = npb.compile_nanopb(proto_path, **kwargs)
         c_output_base = sketch_dir.joinpath(options.PROPERTIES['name'] +
                                             '_config_pb')
         c_header_path = c_output_base + '.h'
