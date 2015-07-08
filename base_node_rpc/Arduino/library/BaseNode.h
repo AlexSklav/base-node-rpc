@@ -70,12 +70,6 @@ public:
   uint32_t milliseconds() { return millis(); }
   void delay_us(uint16_t us) { if (us > 0) { delayMicroseconds(us); } }
   void delay_ms(uint16_t ms) { if (ms > 0) { delay(ms); } }
-  uint32_t max_payload_size() {
-    return (PACKET_SIZE
-            - 3 * sizeof(uint8_t)  // Frame boundary
-            - sizeof(uint16_t)  // UUID
-            - sizeof(uint16_t));  // Payload length
-  }
   uint32_t ram_free() { return free_memory(); }
 
   void pin_mode(uint8_t pin, uint8_t mode) { return pinMode(pin, mode); }

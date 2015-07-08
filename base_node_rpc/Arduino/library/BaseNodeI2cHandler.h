@@ -10,6 +10,13 @@ public:
   typedef base_node_rpc::i2c_handler_t handler_type;
   handler_type i2c_handler_;
 
+  uint32_t max_i2c_payload_size() {
+    return (I2C_PACKET_SIZE
+            - 3 * sizeof(uint8_t)  // Frame boundary
+            - sizeof(uint16_t)  // UUID
+            - sizeof(uint16_t));  // Payload length
+  }
+
   UInt8Array i2c_request(uint8_t address, UInt8Array data) {
     return i2c_handler_.request(address, data);
   }
