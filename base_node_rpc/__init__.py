@@ -1,11 +1,9 @@
 from collections import OrderedDict
 
-import nadamq
-import arduino_array
-from path_helpers import path
-
 
 def package_path():
+    from path_helpers import path
+
     return path(__file__).parent
 
 
@@ -35,6 +33,9 @@ def get_includes():
         ...
 
     '''
+    import arduino_array
+    import nadamq
+
     return ([get_sketch_directory(), get_lib_directory()] +
             arduino_array.get_includes() + nadamq.get_includes())
 

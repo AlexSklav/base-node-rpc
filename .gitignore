@@ -8,10 +8,16 @@ setup.py
 paver-minilib.zip
 build/*
 */*_pb2.py
+*/Arduino/*/RPCBuffer.h
+*/Arduino/library/BaseNodeRPC.h
 */Arduino/*/*CommandProcessor.h
 *.o
 */protobuf/nano
 */protobuf/py
 */protobuf/*.proto
 .sconsign.dblite
-arduino_rpc/protobuf_commands.py
+*/node.py
+*~
+*.swp
+dist
+build
