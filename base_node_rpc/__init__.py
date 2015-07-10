@@ -33,11 +33,9 @@ def get_includes():
         ...
 
     '''
-    import arduino_array
-    import nadamq
+    import arduino_rpc
 
-    return ([get_sketch_directory(), get_lib_directory()] +
-            arduino_array.get_includes() + nadamq.get_includes())
+    return [get_lib_directory()] + arduino_rpc.get_includes()
 
 
 def get_sources():
@@ -45,7 +43,9 @@ def get_sources():
     Return Arduino source file paths.  This includes any supplementary source
     files that are not contained in Arduino libraries.
     '''
-    return get_sketch_directory().files('*.c*')
+    import arduino_rpc
+
+    return get_sketch_directory().files('*.c*') + arduino_rpc.get_sources()
 
 
 def get_firmwares():

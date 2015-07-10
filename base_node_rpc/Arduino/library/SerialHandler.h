@@ -2,7 +2,7 @@
 #define ___SERIAL_HANDLER__H___
 
 #include <NadaMQ.h>
-#include <ArduinoRPC.h>
+#include <PacketParser.h>
 #include <BaseHandler.h>
 
 
