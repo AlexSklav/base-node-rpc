@@ -21,7 +21,7 @@ public:
   uint16_t i2c_buffer_size() { return TWI_BUFFER_LENGTH; }
   UInt8Array i2c_scan() {
     UInt8Array output = get_buffer();
-    int count = 0;
+    uint16_t count = 0;
 
     /* The I2C specification has reserved addresses in the ranges `0x1111XXX`
      * and `0x0000XXX`.  See [here][1] for more details.
