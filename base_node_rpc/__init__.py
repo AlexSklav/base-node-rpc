@@ -1,5 +1,11 @@
 from collections import OrderedDict
 
+try:
+    from .node import Proxy, I2cProxy
+except (ImportError, TypeError):
+    Proxy = None
+    I2cProxy = None
+
 
 def package_path():
     from path_helpers import path

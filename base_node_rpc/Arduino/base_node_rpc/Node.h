@@ -5,21 +5,33 @@
 #include <BaseNodeEeprom.h>
 #include <BaseNodeI2c.h>
 #include <BaseNodeSpi.h>
+#include <BaseNodeSerialHandler.h>
+#include <BaseNodeI2cHandler.h>
+#include <I2cHandler.h>
+#include <SerialHandler.h>
 
+namespace base_node_rpc {
 
 class Node :
   public BaseNode, public BaseNodeEeprom, public BaseNodeI2c,
-  public BaseNodeSpi {
+  public BaseNodeSpi,
+#ifndef DISABLE_SERIAL
+  public BaseNodeSerialHandler,
+#endif  // #ifndef DISABLE_SERIAL
+  public BaseNodeI2cHandler {
 public:
-  uint8_t output_buffer[128];
+  uint8_t buffer_[128];
   Node() : BaseNode() {}
-  virtual UInt8Array get_buffer() {
-    UInt8Array output;
-    output.data = output_buffer;
-    output.length = sizeof(output_buffer);
-    return output;
+  UInt8Array get_buffer() { return UInt8Array(sizeof(buffer_), buffer_); }
+  void begin() {
+#if !defined(DISABLE_SERIAL)
+    Serial.begin(115200);
+#endif  // #ifndef DISABLE_SERIAL
+    // Set i2c clock-rate to 400kHz.
+    TWBR = 12;
   }
 };
 
+}  // namespace base_node_rpc
 
 #endif  // #ifndef ___NODE__H___

@@ -36,9 +36,8 @@ options(
                author_email='christian@fobel.net',
                url=URL,
                license='GPLv2',
-	       install_requires=['arduino_scons>=0.1.post5',
-                                 'nadamq>=0.5.post1', 'path_helpers',
-                                 'wheeler.arduino_rpc>=1.6'],
+               install_requires=['arduino_scons>=0.1.post8',
+                                 'wheeler.arduino_rpc>=1.6.post5'],
                # Install data listed in `MANIFEST.in`
                include_package_data=True,
                packages=[str(PROJECT_PREFIX)]))

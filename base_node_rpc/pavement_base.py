@@ -2,7 +2,8 @@ from paver.easy import task, needs, path, sh, cmdopts, options
 import base_node_rpc
 
 
-DEFAULT_BASE_CLASSES = ['BaseNodeEeprom', 'BaseNodeI2c', 'BaseNodeSpi']
+DEFAULT_BASE_CLASSES = ['BaseNodeSerialHandler', 'BaseNodeEeprom',
+                        'BaseNodeI2c', 'BaseNodeI2cHandler']
 DEFAULT_METHODS_FILTER = lambda df: df[~(df.method_name
                                          .isin(['get_config_fields',
                                                 'get_state_fields']))].copy()
@@ -18,7 +19,8 @@ def get_base_classes_and_headers(options, lib_dir, sketch_dir):
      - rpc classes refer to classes found in the sketch directory.
     '''
     base_classes = getattr(options, 'base_classes', DEFAULT_BASE_CLASSES)
-    rpc_classes = getattr(options, 'rpc_classes', ['Node'])
+    rpc_classes = getattr(options, 'rpc_classes', [options.PROPERTIES['name'] +
+                                                   '::Node'])
 
     input_classes = ['BaseNode'] + base_classes + rpc_classes
     input_headers = ([lib_dir.joinpath('BaseNode.h')] +
