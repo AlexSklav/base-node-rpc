@@ -62,5 +62,7 @@ public:
     Wire.write(data.data, data.length);
     Wire.endTransmission();
   }
+  void i2c_enable_broadcast() { TWAR |= 0x01; }
+  void i2c_disable_broadcast() { TWAR &= ~0x01; }
 };
 #endif  // #ifndef ___BASE_NODE_I2C__H___
