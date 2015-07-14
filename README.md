@@ -17,6 +17,10 @@ The Python package can be installed through `pip` using the following command:
 
     pip install wheeler.base-node-rpc
 
+--------------------------------------------------
+
+# Default base node firmware #
+
 ## Upload firmware ##
 
 To upload the pre-compiled firmware included in the Python package, run the
@@ -32,10 +36,6 @@ serial port.  On systems with multiple serial ports, use the `-p` command line
 argument to specify the serial port to use.  For example:
 
     python -m base_node_rpc.bin.upload -p COM3 uno
-
---------------------------------------------------
-
-# Default base node firmware #
 
 ## Usage ##
 
@@ -254,3 +254,4 @@ requests from the serial interface.  The main methods are:
 [2]: https://code.google.com/p/protobuf/
 [3]: http://koti.kapsi.fi/jpa/nanopb/
 [4]: https://github.com/wheeler-microfluidics/nanopb_helpers
+[5]: https://en.wikipedia.org/wiki/Mixin
