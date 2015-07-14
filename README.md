@@ -11,6 +11,111 @@ Base classes for Arduino RPC node/device.
    [`arduino_rpc`][1] package.
 
 
+## Install ##
+
+The Python package can be installed through `pip` using the following command:
+
+    pip install wheeler.base-node-rpc
+
+## Upload firmware ##
+
+To upload the pre-compiled firmware included in the Python package, run the
+following command:
+
+    python -m base_node_rpc.bin.upload <board type>
+
+replacing `<board type>` with either `uno` or `mega2560`, depending on the
+model of the board.
+
+This will attempt to upload the firmware by automatically discovering the
+serial port.  On systems with multiple serial ports, use the `-p` command line
+argument to specify the serial port to use.  For example:
+
+    python -m base_node_rpc.bin.upload -p COM3 uno
+
+--------------------------------------------------
+
+# Default base node firmware #
+
+## Usage ##
+
+After uploading the firmware to the board, the `base_node_rpc.Proxy` class can be
+used to interact with the Arduino device.
+
+See the session log below for example usage.
+
+### Example interactive session ###
+
+    >>> from serial import Serial
+    >>> from base_node_rpc import Proxy
+
+Connect to serial device.
+
+    >>> serial_device = Serial('/dev/ttyUSB0', baudrate=115200)
+
+Initialize a device proxy using existing serial connection.
+
+    >>> proxy = Proxy(serial_device)
+
+Query the number of bytes free in device RAM.
+
+    >>> proxy.ram_free()
+    1211
+
+Query descriptive properties of device.
+
+    >>> proxy.properties()
+    base_node_software_version                                           0.10.post9
+    name                                                              base_node_rpc
+    manufacturer                                                        Wheeler Lab
+    url                           http://github.com/wheeler-microfluidics/base_n...
+    software_version                                                     0.10.post9
+    dtype: object
+
+Use Arduino API methods interactively.
+
+    >>> # Set pin 13 as output
+    >>> proxy.pin_mode(13, 1)
+    >>> # Turn led on
+    >>> proxy.digital_write(13, 1)
+    >>> # Turn led off
+    >>> proxy.digital_write(13, 0)
+
+Note that most of the Arduino API is available as methods of the proxy:
+
+    >>> proxy.
+    proxy.analog_read                 proxy.i2c_request_from
+    proxy.analog_write                proxy.i2c_scan
+    proxy.array_length                proxy.i2c_write
+    proxy.base_node_software_version  proxy.manufacturer
+    proxy.begin                       proxy.max_i2c_payload_size
+    proxy.buffer_size                 proxy.max_serial_payload_size
+    proxy.delay_ms                    proxy.microseconds
+    proxy.delay_us                    proxy.milliseconds
+    proxy.digital_read                proxy.name
+    proxy.digital_write               proxy.pin_mode
+    proxy.echo_array                  proxy.properties
+    proxy.get_buffer                  proxy.ram_free
+    proxy.help                        proxy.read_eeprom_block
+    proxy.i2c_address                 proxy.set_i2c_address
+    proxy.i2c_available               proxy.software_version
+    proxy.i2c_buffer_size             proxy.str_echo
+    proxy.i2c_read                    proxy.update_eeprom_block
+    proxy.i2c_read_byte               proxy.url
+    proxy.i2c_request
+
+--------------------------------------------------
+
+# Extending base firmware #
+
+While the (precompiled) base firmware is likely flexible enough for many
+applications, one of the key goals of this project is to allow for easy
+extension and customization.
+
+The following section describes the main `BaseNode` class and the various
+[mixin][5] classes to provide modular inclusion of various Arduino libraries
+(e.g., EEPROM, SPI, I2C) as RPC methods.
+
 ## C++ Base classes ##
 
 The following classes may be used to form a basis for an Arduino RPC firmware
