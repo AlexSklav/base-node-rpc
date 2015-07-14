@@ -1,180 +1,151 @@
-# `simple_rpc` #
+# base-node-rpc #
 
-This project demonstrates a simple RPC interface to an Arduino device using
-methods that are automatically registered by a proxy class using command
-meta-data from [Protocol buffer][1] message definitions.
+Base classes for Arduino RPC node/device.
 
-
-# API Example #
-
-Below, we show an example session interacting with the Arduino device through a
-serial stream.  Note that the `NodeProxy` is a generic class from the `nadamq`
-module, and that all `simple_rpc`-specific code is based entirely off of the
-Protocol Buffer definitions and the corresponding auto-generated Python message
-classes.
-
-    >>> from nadamq.command_proxy import (NodeProxy, CommandRequestManager,
-    ...                                   SerialStream)
-    >>> from simple_rpc.requests import (REQUEST_TYPES, CommandResponse,
-    ...                                  CommandRequest, CommandType)
-    >>> stream = SerialStream(‘/dev/ttyUSB0’, baudrate=115200)
-    >>> n = NodeProxy(CommandRequestManager(REQUEST_TYPES, CommandRequest,
-    ...                                     CommandResponse, CommandType),
-    ...               stream)
-    >>> n.
-    n.echo            n.led_on          n.ram_bss_size    n.ram_free        n.ram_size
-    n.led_off         n.led_state       n.ram_data_size   n.ram_heap_size   n.ram_stack_size
-    >>> n.ram_free()
-    6445
-    >>> n.ram_size()
-    8191
-    >>> n.led
-    n.led_off    n.led_on     n.led_state
-    >>> n.led_state()
-    False
-    >>> n.led_on()
-    <simple_rpc.simple_pb2.LEDOnResponse object at 0x7f2871aa4280>
-    >>> n.led_state()
-    True
-    >>> n.led_off()
-    <simple_rpc.simple_pb2.LEDOffResponse object at 0x7f2871aa43d0>
-    >>> n.led_state()
-    False
+ - A memory-efficient set of base classes providing an API to most of the
+   Arduino API, including EEPROM access, raw I2C master-write/slave-request,
+   etc.
+ - Support for processing RPC command requests through either serial or I2C
+   interface.
+ - Utilizes Python (host) and C++ (device) code generation from the
+   [`arduino_rpc`][1] package.
 
 
-# What is this?  Why did you make this? #
+## C++ Base classes ##
 
-Much of the effort of coding our own Arduino projects was dedicated:
+The following classes may be used to form a basis for an Arduino RPC firmware
+that may be interacted with through either a serial port or through I2C (the
+same code path is used for buffers regardless of the source interface).
 
- - To defining and writing protocols.
- - Writing host code to interface with these project-specific protocols.
+### BaseNode ###
 
-There are a few problems with this:
+The `BaseNode` class provides methods to identify key properties of a device
+and exposes most of the Arduino API.  The `BaseNode` class is intended as a
+base class, to be extended by combining with the remaining `Base*` classes.
 
- - Lots of duplicated effort, redefining protocols for every project, or at
-   best, copying and pasting and modifying to suit.
- - Brittle code, since any change on the device protocol API required the host
-   code to be updated separately to match.
- - More time spent on just getting signals to/from the device than spent on the
-   real problem at hand.
+### BaseNodeConfig ###
 
+The `BaseNodeConfig` class provides methods to interact with a persistent
+device configuration.  The main methods are:
 
-## What do we propose? ##
+ - `load_config`: Load a config from persistent storage (e.g., EEPROM).
+ - `save_config`: Write a config to persistent storage.
+ - `reset_config`: Reset in-memory config to default values.
+ - `serialize_config`: Serialize in-memory config to a byte array.
+ - `update_config`: Update in-memory config based on a serialized config.
 
-Instead of writing the protocol for every project, we want to abstract the
-communication to and from the device as far away as possible from the actual
-interface connection _(e.g., serial, I2C, etc.)_.  The goal is to expose
-functions from the device to _a)_ other devices _(e.g., over I2C)_, and _b)_ to
-the host computer, without having to care about where the requested function
-call is coming from.
+Note that the `BaseNodeConfig` class is a template class, with two template
+parameters:
 
-To accomplish this we employ automatic code-generation to scan a set of
-user-defined functions that should be exposed and create code to call the
-functions through:
+ - `typename ConfigMessage`:
+     * The configuration class to use.
+     * Must have the methods: `load(address)`, `save(address)`, `reset()`,
+       `serialize()`, and `update(serialized)`.
+ - `uint8_t Address`: Address in persistent storage where config is stored.
 
- - Serial interface.
- - I2C.
+__NB__ : Currently, the configuration class is assumed to be a
+[Protocol Buffer][2] message type class, with Arduino code generated using the
+[`nanopb`][3] library.  The `nanopb` library is also used for encoding/decoding
+the messages.  The [`nanopb-helpers`][4] package provides a mechanism for
+validating updates to a `nanopb` instance (see "Config validation").
 
-Furthermore, we also get Python code to run on the host side to connect to the
-device over serial, or to devices on the I2C bus by forwarding requests through
-a device connected via serial.
+#### Config validation ####
 
-Voila!  No more writing protocols!  Just add functions to your Arduino sketch,
-and the protocol will be auto-generated based on the function signatures.
-
-Now for the details...
-
-
-# How does it work? #
-
-To expose functions on the Arduino to run via RPC, methods are added to a
-special `Node` class, defined in the `Node.h` header.  The methods of the
-`Node` class act as entry points for the RPC mechanism to the execution context
-of the Arduino.
-
-For example, consider the `pin_mode` RPC method, which is available via the RPC
-interface of the `arduino_rpc` example project.  Below, we show the relevant
-contents of the `Node.h` file, again, which contains the `Node` class
-definition.
-
-```C++
-    class Node {
-    ...
-      void pin_mode(uint8_t pin, uint8_t mode) { return pinMode(pin, mode); }
-    ...
-```
-
-Note that the method is actually just a very simple wrapper around the
-`pinMode` function provided by the Arduino core library.
+__TODO__ Add description of callback methods.
 
 
-## Code-generation ##
+### BaseNodeEeprom ###
 
-Adding a method such as `pin_mode` to the `Node` class is all that is necessary
-to have the following code auto-generated:
+The `BaseNodeEeprom` class is a mixin to add methods for interfacing with
+Arduino EEPROM.
 
- - A [Protocol buffer][1] message type definition for each function signature.
- - Interface stream listeners, each of which listens for incoming requests on a
-   particular interface.  For now, the following interfaces are supported:
-  * Serial.
-  * I2C.
- - A “command-processor”, which:
-  1. Decodes each incoming request _(from any of the supported interfaces)_.
-  2. Unpacks any supplied arguments.
-  3. Calls the corresponding method on the `Node` instance.
-  4. Encodes the return type into a [protocol buffer][1] message.
-  5. Sends the response back over the interface that it was received on.
- - A Python proxy object that exposes the methods of the `Node` class as local
-   methods on the Python object.
-  * _Caveat:_ Due to how the requests are currently encoded by the Python proxy
-    object, the arguments passed to a Python method call _must be passed as
-    keyword arguments_.
+The following methods are provided:
 
-### Notes ###
+ - `update_eeprom_block(address, data)`: Write data byte array to EEPROM
+   address.  Only write to the EEPROM if values have changed.
+ - `read_eeprom_block(address, n)`: Read `n` bytes from EEPROM at address to
+   bytes array.
 
-On the Arduino device, the [`nanopb`][2] library is used for encoding/decoding
-the protocol buffer messages.
+### BaseNodeI2c ###
 
-On the host, the standard [Protocol Buffers][1] compiler is used to generate Python code
-for the message types in the generated [protocol buffers][1] definitions.  An
-instance of the generic `NodeProxy` class then loads the Python protocol buffer code
-and dynamically adds a method for each remote method defined.
+The `BaseNodeI2c` class is a mixin to add methods for interfacing with
+Arduino I2C bus
+
+The following methods are provided:
+
+ - `set_i2c_address(address)`: Set I2C address.
+ - `i2c_address`: Query I2C address.
+ - `i2c_buffer_size`: Query TWI library buffer length.
+ - `i2c_scan`: Return array of addresses found on I2C bus.
+ - `i2c_available`: Number of bytes available in incoming I2C buffer.
+ - `i2c_read_byte`: Read byte from I2C buffer.
+ - `i2c_request_from(address, n_bytes_to_read)`: Request data from I2C slave.
+ - `i2c_read(address, n_bytes_to_read)`: Request followed by read to array.
+ - `i2c_write(address, data)`: Write byte array to address.
+
+### BaseNodeSpi ###
+
+The `BaseNodeSpi` class is a mixin to add methods for interfacing with the
+Arduino SPI API.
+
+The following methods are provided:
+
+ - `set_spi_bit_order(order)`
+ - `set_spi_clock_divider(divider)`
+ - `set_spi_data_mode(mode)`
+ - `spi_transfer(value)`
+
+See the Arduino SPI API reference for details.
+
+### BaseNodeState ###
+
+The `BaseNodeState` class provides methods to interact with an in-memory device
+state structure.  The main methods are:
+
+ - `reset_state`: Reset in-memory state to default values.
+ - `serialize_state`: Serialize in-memory state to a byte array.
+ - `update_state`: Update in-memory state based on a serialized state.
+
+Note that the `BaseNodeState` class is a template class, with the following
+template parameter:
+
+ - `typename StateMessage`:
+     * The state class to use.
+     * Must have the methods: `reset()`, `serialize()`, and
+       `update(serialized)`.
+
+__NB__ : Currently, the state class is assumed to be a
+[Protocol Buffer][2] message type class, with Arduino code generated using the
+[`nanopb`][3] library.  The `nanopb` library is also used for encoding/decoding
+the messages.  The [`nanopb-helpers`][4] package provides a mechanism for
+validating updates to a `nanopb` instance (see "State validation").
+
+#### State validation ####
+
+__TODO__ Add description of callback methods.
 
 
-# Why wouldn’t I want to use this? #
+### BaseNodeI2cHandler ###
 
-## Run-time overhead ##
-
-There is some additional overhead involved in packing/unpacking [Protocol
-Buffer][1] requests and responses.  For _extremely_ time-sensitive code, this
-might be unacceptable.  However, in practice, the round-trip response-time from
-Python-to-device-to-Python is about 5ms.  For _many_ applications, this should
-be sufficiently fast.
+The `BaseNodeI2cHandler` class is a mixin to add methods for handling RPC
+requests from the I2C interface.  The main methods are:
 
 
-## Memory overhead ##
+ - `max_i2c_payload_size`: Return maximum serialized command size supported by
+   the I2C interface handler.
+ - `i2c_request(address, data)`: Send a serialized command byte array to the
+   specified I2C address and return serialized response array.
 
-Currently, each method added to the `Node` class adds about 40 bytes of memory
-overhead.  This still allows quite a few methods, even on an Arduino Uno, but
-we have run up against the memory limit on some of our projects.  However,
-there are several ways to address this issue with the current implementation,
-and we have [some ideas][2] of how to address this during code generation, as
-well.
+### BaseNodeSerialHandler ###
 
-For now, the easiest option is likely to implement a single method that accepts
-two arguments:
+The `BaseNodeSerialHandler` class is a mixin to add methods for handling RPC
+requests from the serial interface.  The main methods are:
 
- 1. A command code.
- 2. A byte array.
-
-The method can then use the command code to call a function/method defined
-outside of the `Node` class.  Note that the byte array could contain an
-arbitrary data-type that can be decoded inside the method to pass the arguments
-required for the specified command.  Note that this requires more boiler-plate
-code on the Arduino and special-handling on the host, but hopefully this is not
-necessary in the majority of cases.
+ - `max_serial_payload_size`: Return maximum serialized command size supported
+   by the serial interface handler.
 
 
-[1]: https://code.google.com/p/protobuf/
-[2]: http://koti.kapsi.fi/jpa/nanopb/
-[3]: https://github.com/wheeler-microfluidics/arduino_rpc/issues/10
+[1]: http://github.com/wheeler-microfluidics/arduino_rpc.git
+[2]: https://code.google.com/p/protobuf/
+[3]: http://koti.kapsi.fi/jpa/nanopb/
+[4]: https://github.com/wheeler-microfluidics/nanopb_helpers

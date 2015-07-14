@@ -51,6 +51,8 @@ inline UInt8Array prog_string(const char* str, UInt8Array array) {
 
 
 class BaseNode : public BufferIFace {
+  /* The `BaseNode` class provides methods to identify key properties of
+   * a device and exposes most of the Arduino API. */
 public:
   BaseNode() {}
 
