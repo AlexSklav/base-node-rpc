@@ -18,7 +18,7 @@ class Node :
 #ifndef DISABLE_SERIAL
   public BaseNodeSerialHandler,
 #endif  // #ifndef DISABLE_SERIAL
-  public BaseNodeI2cHandler {
+  public BaseNodeI2cHandler<base_node_rpc::i2c_handler_t> {
 public:
   uint8_t buffer_[128];
   Node() : BaseNode() {}

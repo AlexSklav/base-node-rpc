@@ -5,9 +5,10 @@
 #include <Array.h>
 
 
+template <typename Handler>
 class BaseNodeI2cHandler {
 public:
-  typedef base_node_rpc::i2c_handler_t handler_type;
+  typedef Handler handler_type;
   handler_type i2c_handler_;
 
   uint32_t max_i2c_payload_size() {

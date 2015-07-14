@@ -76,6 +76,11 @@ struct i2c_write_packet {
 template <typename Parser>
 class I2cReceiver : public Receiver<Parser> {
 public:
+  /* Receiver has `write_f_` functor attribute, allowing stateful responses.
+   *
+   * In other words, it makes it possible for a response to be written to the
+   * source of the original request through a call without providing an address
+   * (the address is automatically set to the source of the request). */
   typedef Receiver<Parser> base_type;
   using base_type::parser_;
 

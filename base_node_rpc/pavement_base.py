@@ -3,7 +3,7 @@ import base_node_rpc
 
 
 DEFAULT_BASE_CLASSES = ['BaseNodeSerialHandler', 'BaseNodeEeprom',
-                        'BaseNodeI2c', 'BaseNodeI2cHandler']
+                        'BaseNodeI2c', 'BaseNodeI2cHandler<Handler>']
 DEFAULT_METHODS_FILTER = lambda df: df[~(df.method_name
                                          .isin(['get_config_fields',
                                                 'get_state_fields']))].copy()
