@@ -11,6 +11,16 @@ class ProxyBase(ap.ProxyBase):
         self._buffer_bounds_check = True
         self._buffer_size = None
 
+    def help(self):
+        '''
+        Open project webpage in new browser tab.
+        '''
+        import webbrowser
+
+        url = self.properties().get('url')
+        if url:
+            webbrowser.open_new_tab(url)
+
     def properties(self):
         import pandas as pd
 
