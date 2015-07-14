@@ -1,6 +1,9 @@
 #ifndef ___BASE_HANDLER__H___
 #define ___BASE_HANDLER__H___
 
+#include <CommandPacketHandler.h>
+
+
 namespace base_node_rpc {
 
 template <typename Parser>
