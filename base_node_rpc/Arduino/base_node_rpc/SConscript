@@ -17,7 +17,7 @@ exec('from %s import get_sources, get_includes' % package.name)
 
 Import('sketch_build_root')
 
-env_dict = {'CPPPATH': get_includes()}
+env_dict = {'CPPPATH': get_includes() + [path('.').abspath()]}
 if 'CFLAGS' in ARGUMENTS:
     env_dict['CFLAGS'] = ARGUMENTS['CFLAGS']
     print '[CFLAGS] "%s"' % env_dict['CFLAGS']
