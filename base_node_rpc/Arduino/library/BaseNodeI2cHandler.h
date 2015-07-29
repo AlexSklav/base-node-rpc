@@ -21,6 +21,8 @@ public:
   UInt8Array i2c_request(uint8_t address, UInt8Array data) {
     return i2c_handler_.request(address, data);
   }
+
+  void i2c_packet_reset() { i2c_handler_.packet_reset(); }
 };
 
 #endif  // #ifndef ___BASE_NODE_I2C_HANDLER__H___

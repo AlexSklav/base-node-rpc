@@ -6,9 +6,9 @@ from nadamq.NadaMq import cPacket, PACKET_TYPES
 
 
 class ProxyBase(ap.ProxyBase):
-    def __init__(self, serial):
+    def __init__(self, serial, buffer_bounds_check=True):
         self._serial = serial
-        self._buffer_bounds_check = True
+        self._buffer_bounds_check = buffer_bounds_check
         self._buffer_size = None
 
     def help(self):

@@ -83,9 +83,39 @@ def generate_rpc_buffer_header():
 
 @task
 def generate_command_processor_header():
+    '''
+    Generate the following headers in a project directory under
+    `Arduino/library`:
+
+     - `Commands.h`
+     - `Properties.h`
+     - `CommandProcessor.h`
+
+    ## `Commands.h` ##
+
+    This header defines the 8-bit code and request/response C structures
+    associated with each command type.  This header can, for example, be
+    included by other projects to make requests through i2c.
+
+    ## `Properties.h` ##
+
+    Contains property string define statements (e.g. `BASE_NODE__NAME`).
+
+    ## `CommandProcessor.h` ##
+
+    Contains the `CommandProcessor` C++ class for the project.
+
+    ## `NodeCommandProcessor.h` ##
+
+    This header is written to the sketch directory and simply includes the
+    three library headers above.
+    '''
     from arduino_rpc.code_gen import write_code
-    from arduino_rpc.rpc_data_frame import get_c_header_code
+    from arduino_rpc.rpc_data_frame import (get_c_commands_header_code,
+                                            get_c_command_processor_header_code)
+    from clang_helpers.data_frame import underscore_to_camelcase
     import arduino_array
+    import jinja2
 
     name = options.PROPERTIES['name']
     sketch_dir = path(name).joinpath('Arduino', name)
@@ -94,17 +124,50 @@ def generate_command_processor_header():
     input_classes, input_headers = get_base_classes_and_headers(options,
                                                                 lib_dir,
                                                                 sketch_dir)
-    output_header = path(name).joinpath('Arduino', name,
-                                        'NodeCommandProcessor.h')
-    extra_header = '\n'.join(['#define BASE_NODE__%s  ("%s")' % (k.upper(), v)
-                              for k, v in options.PROPERTIES.iteritems()])
-    f_get_code = lambda *args_: get_c_header_code(*(args_ + (name, )),
-                                                  extra_header=extra_header)
+    camel_name = underscore_to_camelcase(name)
+
+    sketch_dir = path(name).joinpath('Arduino', name)
+
+    project_lib_dir = path(name).joinpath('Arduino', 'library', camel_name)
+    if not project_lib_dir.isdir():
+        project_lib_dir.makedirs_p()
+
+    with project_lib_dir.joinpath('Properties.h').open('wb') as output:
+        print >> output, '#ifndef ___%s__PROPERTIES___' % name.upper()
+        print >> output, '#define ___%s__PROPERTIES___' % name.upper()
+        print >> output, ''
+        for k, v in options.PROPERTIES.iteritems():
+            print >> output, '#ifndef BASE_NODE__%s' % k.upper()
+            print >> output, '#define BASE_NODE__%s  ("%s")' % (k.upper(), v)
+            print >> output, '#endif'
+        print >> output, ''
+        print >> output, '#endif'
+
+    with sketch_dir.joinpath('NodeCommandProcessor.h').open('wb') as output:
+        template = jinja2.Template('''\
+#ifndef ___{{ name.upper()  }}___
+#define ___{{ name.upper()  }}___
+
+#include "{{ camel_name }}/Properties.h"
+#include "{{ camel_name }}/CommandProcessor.h"
+
+#endif  // #ifndef ___{{ name.upper()  }}___''')
+        print >> output, template.render(name=name, camel_name=camel_name)
+        print >> output, ''
+
+    headers = {'Commands': get_c_commands_header_code,
+               'CommandProcessor': get_c_command_processor_header_code}
 
     methods_filter = getattr(options, 'methods_filter', DEFAULT_METHODS_FILTER)
-    write_code(input_headers, input_classes, output_header, f_get_code,
-               *['-I%s' % p for p in [lib_dir.abspath()] +
-                 arduino_array.get_includes()], methods_filter=methods_filter)
+
+    for k, f in headers.iteritems():
+        output_header = project_lib_dir.joinpath('%s.h' % k)
+        f_get_code = lambda *args_: f(*(args_ + (name, )))
+
+        write_code(input_headers, input_classes, output_header, f_get_code,
+                   *['-I%s' % p for p in [lib_dir.abspath()] +
+                     arduino_array.get_includes()],
+                   methods_filter=methods_filter)
 
 
 @task
@@ -138,6 +201,8 @@ class I2cProxy(I2cProxyMixin, Proxy):
 @task
 def generate_config_c_code():
     import nanopb_helpers as npb
+    from clang_helpers.data_frame import underscore_to_camelcase
+    from path_helpers import path
 
     sketch_dir = options.rpc_module.get_sketch_directory()
     proto_path = sketch_dir.joinpath('config.proto').abspath()
@@ -148,14 +213,23 @@ def generate_config_c_code():
             kwargs = {'options_file': options_path}
         else:
             kwargs = {}
+
+        name = options.PROPERTIES['name']
+        camel_name = underscore_to_camelcase(name)
+        project_lib_dir = path(name).joinpath('Arduino', 'library', camel_name)
+        if not project_lib_dir.isdir():
+            project_lib_dir.makedirs_p()
+
         nano_pb_code = npb.compile_nanopb(proto_path, **kwargs)
-        c_output_base = sketch_dir.joinpath(options.PROPERTIES['name'] +
-                                            '_config_pb')
+        c_output_base = project_lib_dir.joinpath('config_pb')
         c_header_path = c_output_base + '.h'
         (c_output_base + '.c').write_bytes(nano_pb_code['source']
                                            .replace('{{ header_path }}',
                                                     c_header_path.name))
-        c_header_path.write_bytes(nano_pb_code['header'])
+        c_header_path.write_bytes(nano_pb_code['header']
+                                  .replace('PB_CONFIG_PB_H_INCLUDED',
+                                           'PB__%s__CONFIG_PB_H_INCLUDED'
+                                           % name.upper()))
 
 
 @task

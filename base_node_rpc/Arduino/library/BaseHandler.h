@@ -49,7 +49,13 @@ public:
             - sizeof(uint16_t));  // CRC
   }
   void packet_reset() { receiver_.reset(); }
-  uint8_t packet_ready() { return receiver_.packet_ready(); }
+  uint8_t packet_ready() {
+    if (packet_error() != 0) {
+      packet_reset();
+      return false;
+    }
+    return receiver_.packet_ready();
+  }
   uint8_t packet_error() { return receiver_.packet_error(); }
   UInt8Array packet_read() {
     UInt8Array output = packet_.payload();

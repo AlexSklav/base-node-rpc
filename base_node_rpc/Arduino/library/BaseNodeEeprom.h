@@ -4,6 +4,7 @@
 
 #include "BaseBuffer.h"
 #include <pb_eeprom.h>
+#include <avr/io.h>  // End of eeprom: `E2END`
 
 
 class BaseNodeEeprom : public BufferIFace {
@@ -20,6 +21,8 @@ public:
     output.length = n;
     return output;
   }
+
+  uint32_t eeprom_e2end() const { return E2END; }
 };
 
 
