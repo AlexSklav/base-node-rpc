@@ -14,8 +14,10 @@ struct serial_write_packet {
 
   serial_write_packet(Stream &stream) : output(stream) {}
 
-  void operator()(UInt8Array data, uint8_t type_=Packet::packet_type::DATA) {
+  void operator()(UInt8Array data, uint8_t type_=Packet::packet_type::DATA,
+                  uint16_t iuid=0) {
     FixedPacket to_send;
+    to_send.iuid_ = iuid;
     to_send.type(type_);
     to_send.reset_buffer(data.length, data.data);
     to_send.payload_length_ = data.length;
@@ -28,7 +30,8 @@ struct serial_write_packet {
     output.write(startflag, 3);
     serialize_any(output, to_send.iuid_);
     serialize_any(output, type_);
-    if (to_send.type() == Packet::packet_type::DATA) {
+    if ((to_send.type() == Packet::packet_type::DATA) ||
+        (to_send.type() == Packet::packet_type::STREAM)) {
       serialize_any(output, static_cast<uint16_t>(to_send.payload_length_));
       if (to_send.payload_length_ > 0) {
         output.write((stream_byte_type*)to_send.payload_buffer_,
