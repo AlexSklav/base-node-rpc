@@ -1,15 +1,33 @@
+import datetime
 import sys
 from collections import OrderedDict
 
-import arduino_rpc.proxy as ap
 from nadamq.NadaMq import cPacket, PACKET_TYPES
+from .queue import SerialStream, PacketWatcher
 
 
-class ProxyBase(ap.ProxyBase):
+class ProxyBase(object):
     def __init__(self, serial, buffer_bounds_check=True):
         self._serial = serial
         self._buffer_bounds_check = buffer_bounds_check
         self._buffer_size = None
+        self._packet_watcher = None
+        self._reset_packet_watcher(serial)
+
+    def _reset_packet_watcher(self, serial):
+        stream = SerialStream(serial)
+        packet_watcher = PacketWatcher(stream)
+        packet_watcher.start()
+
+        # Terminate existing watcher thread.
+        if self._packet_watcher is not None:
+            self._packet_watcher.terminate()
+
+        # Set new watcher.
+        self._packet_watcher = packet_watcher
+        self._serial = serial
+        self._stream = stream
+        self._packet_watcher.enabled = True
 
     def help(self):
         '''
@@ -59,7 +77,37 @@ class ProxyBase(ap.ProxyBase):
         if self._buffer_bounds_check and len(packet.data()) > self.buffer_size:
             raise IOError('Packet size %s bytes too large.' %
                           (len(packet.data()) - self.buffer_size))
-        return super(ProxyBase, self)._send_command(packet)
+
+        # Flush outstanding data packets.
+        for p in xrange(self.queues['data'].qsize()):
+            self.queues['data'].get()
+
+        self._packet_watcher.enabled = False
+        try:
+            self._serial.write(packet.tostring())
+            result = self._read_response()
+        finally:
+            self._packet_watcher.enabled = True
+        return result
+
+    def _read_response(self):
+        start = datetime.datetime.now()
+        while self.queues['data'].qsize() < 1:
+            self._packet_watcher.parse_available()
+            if (datetime.datetime.now() - start).total_seconds() > 10:
+               raise IOError('Timed out waiting for response.')
+        # Return packet from queue.
+        return self.queues['data'].get()[1]
+
+    @property
+    def queues(self):
+        return self._packet_watcher.queues
+
+    def terminate(self):
+        self._packet_watcher.terminate()
+
+    def __del__(self):
+        self.terminate()
 
 
 class I2cProxyMixin(object):
