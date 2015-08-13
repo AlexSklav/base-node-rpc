@@ -119,3 +119,33 @@ class I2cProxyMixin(object):
         response = self.proxy.i2c_request(self.address,
                                           map(ord, packet.data()))
         return cPacket(data=response.tostring(), type_=PACKET_TYPES.DATA)
+
+
+def connect(proxy_class, baudrate=115200, name=None, verify=None):
+    '''
+    Attempt to auto-connect to a proxy.
+
+    If `name` is specified, only connect to proxy matching name.
+    If `verify` callback is specified, only connect to proxy where `verify`
+    returns `True`.
+    '''
+    # Import here, since other classes in this file do not depend on serial
+    # libraries directly.
+    from serial import Serial
+    from serial_device import get_serial_ports
+
+    if name and verify is None:
+        verify = lambda p: p.properties()['name'] == name
+
+    for port in get_serial_ports():
+        serial_device = Serial(port, baudrate=baudrate)
+        proxy = proxy_class(serial_device)
+        if verify is None:
+            return proxy
+        else:
+            try:
+                if verify(proxy):
+                    return proxy
+            except:
+                serial_device.close()
+    raise IOError('Device not found on any port.')
