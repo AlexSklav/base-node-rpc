@@ -78,7 +78,7 @@ def generate_rpc_buffer_header():
 
     output_dir = (path(options.PROPERTIES['name'])
                   .joinpath('Arduino', options.PROPERTIES['name']))
-    rpc_df.generate_rpc_buffer_header(output_dir)
+    rpc_df.generate_rpc_buffer_header(output_dir, source_dir=output_dir)
 
 
 @task
