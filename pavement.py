@@ -22,7 +22,7 @@ PROPERTIES = OrderedDict([('name', PROJECT_PREFIX),
                           ('manufacturer', 'Wheeler Lab'),
                           ('software_version', VERSION),
                           ('url', URL)])
-package_name = 'wheeler.' + PROJECT_PREFIX.replace('_', '-')
+package_name = PROJECT_PREFIX.replace('_', '-')
 print 'package_name', package_name
 
 options(
@@ -37,7 +37,7 @@ options(
                url=URL,
                license='GPLv2',
                install_requires=['arduino_scons>=0.1.post8',
-                                 'wheeler.arduino_rpc>=1.6.post15'],
+                                 'arduino-rpc>=1.6.post16'],
                # Install data listed in `MANIFEST.in`
                include_package_data=True,
                packages=[str(PROJECT_PREFIX)]))
