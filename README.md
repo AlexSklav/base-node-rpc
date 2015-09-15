@@ -15,7 +15,7 @@ Base classes for Arduino RPC node/device.
 
 The Python package can be installed through `pip` using the following command:
 
-    pip install wheeler.base-node-rpc
+    pip install base-node-rpc
 
 --------------------------------------------------
 
