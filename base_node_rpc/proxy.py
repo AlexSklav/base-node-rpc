@@ -8,17 +8,17 @@ from .queue import SerialStream, PacketWatcher
 
 
 class ProxyBase(object):
-    def __init__(self, serial, buffer_bounds_check=True):
+    def __init__(self, serial, buffer_bounds_check=True, high_water_mark=10):
         self._serial = serial
         self._buffer_bounds_check = buffer_bounds_check
         self._buffer_size = None
         self._packet_watcher = None
-        self._reset_packet_watcher(serial)
+        self._reset_packet_watcher(serial, high_water_mark)
         self._timeout_s = 0.5
 
-    def _reset_packet_watcher(self, serial):
+    def _reset_packet_watcher(self, serial, high_water_mark):
         stream = SerialStream(serial)
-        packet_watcher = PacketWatcher(stream)
+        packet_watcher = PacketWatcher(stream, high_water_mark=high_water_mark)
         packet_watcher.start()
 
         # Terminate existing watcher thread.
@@ -30,6 +30,14 @@ class ProxyBase(object):
         self._serial = serial
         self._stream = stream
         self._packet_watcher.enabled = True
+
+    @property
+    def high_water_mark(self):
+        return self._packet_watcher.message_parser.high_water_mark
+
+    @high_water_mark.setter
+    def high_water_mark(self, message_count):
+        self._packet_watcher.message_parser.high_water_mark = message_count
 
     def help(self):
         '''
@@ -125,7 +133,7 @@ class I2cProxyMixin(object):
 
 
 def connect(proxy_class, baudrate=115200, name=None, verify=None,
-            retry_count=6):
+            retry_count=6, high_water_mark=None):
     '''
     Attempt to auto-connect to a proxy.
 

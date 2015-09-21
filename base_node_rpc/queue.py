@@ -9,10 +9,11 @@ from nadamq.NadaMq import cPacketParser, PACKET_TYPES
 
 
 class PacketQueueManager(object):
-    def __init__(self):
+    def __init__(self, high_water_mark=None):
         self._packet_parser = cPacketParser()
         packet_types = ['data', 'ack', 'stream']
         self.packet_queues = pd.Series([Queue() for t in packet_types], index=packet_types)
+        self.high_water_mark = high_water_mark
 
     def parse_available(self, stream):
         data = stream.read()
@@ -29,12 +30,17 @@ class PacketQueueManager(object):
                 self._packet_parser.reset()
 
         for t, p in packets:
-            if p.type_ == PACKET_TYPES.DATA:
+            if p.type_ == PACKET_TYPES.DATA and not self.queue_full('data'):
                 self.packet_queues['data'].put((t, p))
-            elif p.type_ == PACKET_TYPES.ACK:
+            elif p.type_ == PACKET_TYPES.ACK and not self.queue_full('ack'):
                 self.packet_queues.ack.put((t, p))
-            elif p.type_ == PACKET_TYPES.STREAM:
+            elif ((p.type_ == PACKET_TYPES.STREAM) and
+                  (not self.queue_full('stream'))):
                 self.packet_queues.stream.put((t, p))
+
+    def queue_full(self, name):
+        return ((self.high_water_mark is not None) and
+                (self.packet_queues[name].qsize() >= self.high_water_mark))
 
 
 class SerialStream(object):
@@ -57,8 +63,8 @@ class FakeStream(object):
 
 
 class PacketWatcher(Thread):
-    def __init__(self, stream, delay_seconds=.01):
-        self.message_parser = PacketQueueManager()
+    def __init__(self, stream, delay_seconds=.01, high_water_mark=None):
+        self.message_parser = PacketQueueManager(high_water_mark)
         self.stream = stream
         self.enabled = False
         self._terminated = False
