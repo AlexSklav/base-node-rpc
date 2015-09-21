@@ -1,3 +1,4 @@
+import time
 import datetime
 import sys
 from collections import OrderedDict
@@ -13,6 +14,7 @@ class ProxyBase(object):
         self._buffer_size = None
         self._packet_watcher = None
         self._reset_packet_watcher(serial)
+        self._timeout_s = 0.5
 
     def _reset_packet_watcher(self, serial):
         stream = SerialStream(serial)
@@ -94,7 +96,8 @@ class ProxyBase(object):
         start = datetime.datetime.now()
         while self.queues['data'].qsize() < 1:
             self._packet_watcher.parse_available()
-            if (datetime.datetime.now() - start).total_seconds() > 10:
+            if self._timeout_s < (datetime.datetime.now() -
+                                  start).total_seconds():
                raise IOError('Timed out waiting for response.')
         # Return packet from queue.
         return self.queues['data'].get()[1]
@@ -121,7 +124,8 @@ class I2cProxyMixin(object):
         return cPacket(data=response.tostring(), type_=PACKET_TYPES.DATA)
 
 
-def connect(proxy_class, baudrate=115200, name=None, verify=None):
+def connect(proxy_class, baudrate=115200, name=None, verify=None,
+            retry_count=6):
     '''
     Attempt to auto-connect to a proxy.
 
@@ -138,14 +142,27 @@ def connect(proxy_class, baudrate=115200, name=None, verify=None):
         verify = lambda p: p.properties()['name'] == name
 
     for port in get_serial_ports():
-        serial_device = Serial(port, baudrate=baudrate)
-        proxy = proxy_class(serial_device)
-        if verify is None:
-            return proxy
-        else:
+        for i in xrange(retry_count):
+            serial_device = Serial(port, baudrate=baudrate)
+            time.sleep(.5 * i)
+            kwargs = {}
+            if high_water_mark:
+                kwargs['high_water_mark'] = high_water_mark
+            proxy = proxy_class(serial_device, **kwargs)
             try:
-                if verify(proxy):
-                    return proxy
-            except:
+                proxy.ram_free()
+            except IOError:
+                if i >= retry_count - 1: raise
+                proxy.terminate()
                 serial_device.close()
+                continue
+            if verify is None:
+                return proxy
+            else:
+                try:
+                    if verify(proxy):
+                        return proxy
+                except:
+                    proxy.terminate()
+                    serial_device.close()
     raise IOError('Device not found on any port.')
