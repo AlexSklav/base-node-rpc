@@ -133,7 +133,7 @@ class I2cProxyMixin(object):
 
 
 def connect(proxy_class, baudrate=115200, name=None, verify=None,
-            retry_count=6, high_water_mark=None):
+            retry_count=6, high_water_mark=None, port=None):
     '''
     Attempt to auto-connect to a proxy.
 
@@ -149,7 +149,12 @@ def connect(proxy_class, baudrate=115200, name=None, verify=None,
     if name and verify is None:
         verify = lambda p: p.properties()['name'] == name
 
-    for port in get_serial_ports():
+    if port is None:
+        ports = get_serial_ports()
+    else:
+        ports = [port]
+
+    for port in ports:
         for i in xrange(retry_count):
             serial_device = Serial(port, baudrate=baudrate)
             time.sleep(.5 * i)
