@@ -1,3 +1,5 @@
+import warnings
+
 from paver.easy import task, needs, path, sh, cmdopts, options
 import base_node_rpc
 
@@ -47,7 +49,12 @@ def generate_validate_header(message_name, sketch_dir):
                            write_handler_validator_header)
     from . import get_lib_directory
 
-    config = import_module('.config', package=options.rpc_module.__name__)
+    try:
+        config = import_module('.config', package=options.rpc_module.__name__)
+    except ImportError:
+        warnings.warn('ImportError: could not import %s.config' %
+                      options.rpc_module.__name__)
+        return
 
     lib_dir = get_lib_directory()
     if hasattr(config, message_name):
