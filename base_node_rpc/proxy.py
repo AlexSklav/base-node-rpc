@@ -131,6 +131,9 @@ class I2cProxyMixin(object):
                                           map(ord, packet.data()))
         return cPacket(data=response.tostring(), type_=PACKET_TYPES.DATA)
 
+    def __del__(self):
+        pass
+
 
 def connect(proxy_class, baudrate=115200, name=None, verify=None,
             retry_count=6, high_water_mark=None, port=None):
