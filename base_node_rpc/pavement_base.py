@@ -23,8 +23,8 @@ def get_base_classes_and_headers(options, lib_dir, sketch_dir):
                                                    '::Node'])
 
     input_classes = ['BaseNode'] + base_classes + rpc_classes
-    input_headers = ([lib_dir.joinpath('BaseNode.h')] +
-                     [lib_dir.joinpath('%s.h' % c.split('<')[0])
+    input_headers = ([lib_dir.joinpath('BaseNodeRpc', 'BaseNode.h')] +
+                     [lib_dir.joinpath('BaseNodeRpc', '%s.h' % c.split('<')[0])
                       for c in base_classes] +
                      len(rpc_classes) * [sketch_dir.joinpath('Node.h')])
     return input_classes, input_headers

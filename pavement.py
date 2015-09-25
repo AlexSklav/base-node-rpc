@@ -46,7 +46,7 @@ options(
 @task
 def generate_library_main_header():
     library_header = (base_node_rpc.get_lib_directory()
-                    .joinpath('BaseNodeRpc.h'))
+                    .joinpath('BaseNodeRpc', 'BaseNodeRpc.h'))
     library_header.write_bytes('''
 #ifndef ___BASE_NODE_RPC__H___
 #define ___BASE_NODE_RPC__H___
