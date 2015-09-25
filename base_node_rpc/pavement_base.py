@@ -47,10 +47,7 @@ def generate_validate_header(message_name, sketch_dir):
                            write_handler_validator_header)
     from . import get_lib_directory
 
-    try:
-        config = import_module('.config', package=options.rpc_module.__name__)
-    except ImportError:
-        return
+    config = import_module('.config', package=options.rpc_module.__name__)
 
     lib_dir = get_lib_directory()
     if hasattr(config, message_name):
