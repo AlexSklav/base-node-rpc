@@ -1,14 +1,14 @@
 #ifndef ___NODE__H___
 #define ___NODE__H___
 
-#include <BaseNodeRpc.h>
-#include <BaseNodeEeprom.h>
-#include <BaseNodeI2c.h>
-#include <BaseNodeSpi.h>
-#include <BaseNodeSerialHandler.h>
-#include <BaseNodeI2cHandler.h>
-#include <I2cHandler.h>
-#include <SerialHandler.h>
+#include <BaseNodeRpc/BaseNodeRpc.h>
+#include <BaseNodeRpc/BaseNodeEeprom.h>
+#include <BaseNodeRpc/BaseNodeI2c.h>
+#include <BaseNodeRpc/BaseNodeSpi.h>
+#include <BaseNodeRpc/BaseNodeSerialHandler.h>
+#include <BaseNodeRpc/BaseNodeI2cHandler.h>
+#include <BaseNodeRpc/I2cHandler.h>
+#include <BaseNodeRpc/SerialHandler.h>
 
 namespace base_node_rpc {
 

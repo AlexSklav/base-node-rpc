@@ -54,7 +54,7 @@ def generate_library_main_header():
 #ifndef BASE_NODE__BASE_NODE_SOFTWARE_VERSION
 #define BASE_NODE__BASE_NODE_SOFTWARE_VERSION   "%s"
 #endif
-#include <BaseNode.h>
+#include "BaseNode.h"
 
 #endif  // #ifndef ___BASE_NODE_RPC__H___
     '''.strip() % options.PROPERTIES['software_version'])
