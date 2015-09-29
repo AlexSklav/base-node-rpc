@@ -44,7 +44,7 @@ def generate_validate_header(message_name, sketch_dir):
     from importlib import import_module
 
     from path_helpers import path
-    import arduino_array
+    import c_array_defs
     from .protobuf import (get_handler_validator_class_code,
                            write_handler_validator_header)
     from . import get_lib_directory
@@ -64,7 +64,7 @@ def generate_validate_header(message_name, sketch_dir):
                                                                     sketch_dir)
         message_type = getattr(config, message_name)
         args = ['-I%s' % p for p in [lib_dir.abspath()] +
-                arduino_array.get_includes()]
+                c_array_defs.get_includes()]
         validator_code = get_handler_validator_class_code(input_headers,
                                                           input_classes,
                                                           message_type, *args)
@@ -118,7 +118,7 @@ def generate_command_processor_header():
     from arduino_rpc.rpc_data_frame import (get_c_commands_header_code,
                                             get_c_command_processor_header_code)
     from clang_helpers.data_frame import underscore_to_camelcase
-    import arduino_array
+    import c_array_defs
     import jinja2
 
     name = options.PROPERTIES['name']
@@ -170,7 +170,7 @@ def generate_command_processor_header():
 
         write_code(input_headers, input_classes, output_header, f_get_code,
                    *['-I%s' % p for p in [lib_dir.abspath()] +
-                     arduino_array.get_includes()],
+                     c_array_defs.get_includes()],
                    methods_filter=methods_filter)
 
 
@@ -178,7 +178,7 @@ def generate_command_processor_header():
 def generate_python_code():
     from arduino_rpc.code_gen import write_code
     from arduino_rpc.rpc_data_frame import get_python_code
-    import arduino_array
+    import c_array_defs
 
     name = options.PROPERTIES['name']
     sketch_dir = path(name).joinpath('Arduino', name)
@@ -199,7 +199,7 @@ class I2cProxy(I2cProxyMixin, Proxy):
     methods_filter = getattr(options, 'methods_filter', DEFAULT_METHODS_FILTER)
     write_code(input_headers, input_classes, output_file, f_python_code,
                *['-I%s' % p for p in [lib_dir.abspath()] +
-                 arduino_array.get_includes()], methods_filter=methods_filter)
+                 c_array_defs.get_includes()], methods_filter=methods_filter)
 
 
 @task

@@ -2,7 +2,7 @@
 #define ___BASE_NODE_CONFIG__H___
 
 
-#include <Array.h>
+#include <CArrayDefs.h>
 #include <Wire.h>
 #include <pb.h>
 

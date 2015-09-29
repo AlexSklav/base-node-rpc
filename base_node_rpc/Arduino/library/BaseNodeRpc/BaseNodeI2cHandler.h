@@ -2,7 +2,7 @@
 #define ___BASE_NODE_I2C_HANDLER__H___
 
 #include "I2cHandler.h"
-#include <Array.h>
+#include <CArrayDefs.h>
 
 
 template <typename Handler>

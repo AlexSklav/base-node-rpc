@@ -1,7 +1,7 @@
 #ifndef ___BASE_BUFFER__H___
 #define ___BASE_BUFFER__H___
 
-#include "Array.h"
+#include "CArrayDefs.h"
 
 struct BufferIFace {
   virtual UInt8Array get_buffer() = 0;

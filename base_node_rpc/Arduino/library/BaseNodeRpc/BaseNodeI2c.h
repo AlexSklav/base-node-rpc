@@ -3,7 +3,7 @@
 
 
 #include <Wire.h>
-#include "Array.h"
+#include "CArrayDefs.h"
 #include "BaseBuffer.h"
 
 #define BROADCAST_ADDRESS 0x00

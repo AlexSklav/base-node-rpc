@@ -2,7 +2,7 @@
 #define ___BASE_NODE_STATE__H___
 
 
-#include <Array.h>
+#include <CArrayDefs.h>
 #include <pb.h>
 
 
