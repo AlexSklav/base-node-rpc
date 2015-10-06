@@ -1,7 +1,31 @@
+from datetime import datetime
+import os
+import shutil
 import warnings
 
 from paver.easy import task, needs, path, sh, cmdopts, options
 import base_node_rpc
+
+
+def recursive_overwrite(src, dest, ignore=None):
+    '''
+    http://stackoverflow.com/questions/12683834/how-to-copy-directory-recursively-in-python-and-overwrite-all#15824216
+    '''
+    if os.path.isdir(src):
+        if not os.path.isdir(dest):
+            os.makedirs(dest)
+        files = os.listdir(src)
+        if ignore is not None:
+            ignored = ignore(src, files)
+        else:
+            ignored = set()
+        for f in files:
+            if f not in ignored:
+                recursive_overwrite(os.path.join(src, f),
+                                    os.path.join(dest, f),
+                                    ignore)
+    else:
+        shutil.copyfile(src, dest)
 
 
 DEFAULT_BASE_CLASSES = ['BaseNodeSerialHandler', 'BaseNodeEeprom',
@@ -9,6 +33,30 @@ DEFAULT_BASE_CLASSES = ['BaseNodeSerialHandler', 'BaseNodeEeprom',
 DEFAULT_METHODS_FILTER = lambda df: df[~(df.method_name
                                          .isin(['get_config_fields',
                                                 'get_state_fields']))].copy()
+prefix = 'base_node_rpc.pavement_base.'
+LIB_GENERATE_TASKS = [prefix + h for h in
+                      ('generate_command_processor_header',
+                       'generate_config_c_code', 'generate_rpc_buffer_header',
+                       'generate_all_code')]
+LIB_CMDOPTS = [('lib_out_dir=', 'o', 'Output directory for Arduino library.')]
+
+
+def verify_library_directory(options):
+    '''
+    Must be called from task function accepting `LIB_CMDOPTS` as `cmdopts`.
+    '''
+    import inspect
+
+    from clang_helpers.data_frame import underscore_to_camelcase
+
+    cmd_opts = getattr(options, inspect.currentframe().f_back.f_code.co_name)
+    output_dir = path(getattr(cmd_opts, 'lib_out_dir',
+                              options.rpc_module.get_lib_directory()))
+    name = options.PROPERTIES['name']
+    camel_name = underscore_to_camelcase(name)
+    library_dir = output_dir.joinpath(camel_name)
+    library_dir.makedirs_p()
+    return library_dir
 
 
 def get_base_classes_and_headers(options, lib_dir, sketch_dir):
@@ -27,8 +75,9 @@ def get_base_classes_and_headers(options, lib_dir, sketch_dir):
     rpc_classes = getattr(options, 'rpc_classes', [module_name + '::Node'])
 
     input_classes = ['BaseNode'] + base_classes + rpc_classes
-    input_headers = ([lib_dir.joinpath('BaseNodeRpc', 'BaseNode.h')] +
-                     [lib_dir.joinpath('BaseNodeRpc', '%s.h' % c.split('<')[0])
+    base_node_lib_dir = lib_dir.joinpath('BaseNodeRpc', 'src', 'BaseNodeRpc')
+    input_headers = ([base_node_lib_dir.joinpath('BaseNode.h')] +
+                     [base_node_lib_dir.joinpath('%s.h' % c.split('<')[0])
                       for c in base_classes] +
                      len(rpc_classes) * [sketch_dir.joinpath('Node.h')])
     return input_classes, input_headers
@@ -79,15 +128,29 @@ def generate_validate_header(message_name, sketch_dir):
 
 
 @task
-def generate_rpc_buffer_header():
-    import arduino_rpc.rpc_data_frame as rpc_df
-    module_name = options.PROPERTIES['package_name'].replace('-', '_')
-    output_dir = path(module_name).joinpath('Arduino', module_name)
-    rpc_df.generate_rpc_buffer_header(output_dir, source_dir=output_dir)
+@cmdopts(LIB_CMDOPTS, share_with=LIB_GENERATE_TASKS)
+def copy_existing_headers(options):
+    project_lib_dir = verify_library_directory(options)
+    source_dir = options.rpc_module.get_lib_directory()
+    output_dir = project_lib_dir.parent
+    if source_dir == output_dir:
+        print 'Output library directory is same as source - do not copy.'
+    else:
+        print 'Output library directory differs from source - copy.'
+        recursive_overwrite(source_dir, output_dir)
 
 
 @task
-def generate_command_processor_header():
+@cmdopts(LIB_CMDOPTS, share_with=LIB_GENERATE_TASKS)
+def generate_rpc_buffer_header(options):
+    import arduino_rpc.rpc_data_frame as rpc_df
+    sketch_dir = options.rpc_module.get_sketch_directory()
+    rpc_df.generate_rpc_buffer_header(sketch_dir, source_dir=sketch_dir)
+
+
+@task
+@cmdopts(LIB_CMDOPTS, share_with=LIB_GENERATE_TASKS)
+def generate_command_processor_header(options):
     '''
     Generate the following headers in a project directory under
     `Arduino/library`:
@@ -115,7 +178,7 @@ def generate_command_processor_header():
     This header is written to the sketch directory and simply includes the
     three library headers above.
     '''
-    from arduino_rpc.code_gen import write_code
+    from arduino_rpc.code_gen import write_code, C_GENERATED_WARNING_MESSAGE
     from arduino_rpc.rpc_data_frame import (get_c_commands_header_code,
                                             get_c_command_processor_header_code)
     from clang_helpers.data_frame import underscore_to_camelcase
@@ -132,15 +195,14 @@ def generate_command_processor_header():
                                                                 sketch_dir)
     camel_name = underscore_to_camelcase(module_name)
 
-    sketch_dir = path(module_name).joinpath('Arduino', module_name)
+    sketch_dir = path(name).joinpath('Arduino', name)
+    project_lib_dir = verify_library_directory(options)
+    arduino_src_dir = project_lib_dir.joinpath('src', project_lib_dir.name)
 
-    project_lib_dir = path(module_name).joinpath('Arduino', 'library', camel_name)
-    if not project_lib_dir.isdir():
-        project_lib_dir.makedirs_p()
-
-    with project_lib_dir.joinpath('Properties.h').open('wb') as output:
-        print >> output, '#ifndef ___%s__PROPERTIES___' % module_name.upper()
-        print >> output, '#define ___%s__PROPERTIES___' % module_name.upper()
+    with arduino_src_dir.joinpath('Properties.h').open('wb') as output:
+        print >> output, C_GENERATED_WARNING_MESSAGE % datetime.now()
+        print >> output, '#ifndef ___%s__PROPERTIES___' % name.upper()
+        print >> output, '#define ___%s__PROPERTIES___' % name.upper()
         print >> output, ''
         for k, v in options.PROPERTIES.iteritems():
             print >> output, '#ifndef BASE_NODE__%s' % k.upper()
@@ -158,7 +220,8 @@ def generate_command_processor_header():
 #include "{{ camel_name }}/CommandProcessor.h"
 
 #endif  // #ifndef ___{{ name.upper()  }}___''')
-        print >> output, template.render(name=module_name, camel_name=camel_name)
+        print >> output, C_GENERATED_WARNING_MESSAGE % datetime.now()
+        print >> output, template.render(name=name, camel_name=camel_name)
         print >> output, ''
 
     headers = {'Commands': get_c_commands_header_code,
@@ -167,8 +230,10 @@ def generate_command_processor_header():
     methods_filter = getattr(options, 'methods_filter', DEFAULT_METHODS_FILTER)
 
     for k, f in headers.iteritems():
-        output_header = project_lib_dir.joinpath('%s.h' % k)
-        f_get_code = lambda *args_: f(*(args_ + (module_name, )))
+        output_header = arduino_src_dir.joinpath('%s.h' % k)
+        # Prepend auto-generated warning to generated source code.
+        f_get_code = lambda *args_: ((C_GENERATED_WARNING_MESSAGE %
+                                      datetime.now()) + f(*(args_ + (name, ))))
 
         write_code(input_headers, input_classes, output_header, f_get_code,
                    *['-I%s' % p for p in [lib_dir.abspath()] +
@@ -177,8 +242,10 @@ def generate_command_processor_header():
 
 
 @task
-def generate_python_code():
-    from arduino_rpc.code_gen import write_code
+@cmdopts(LIB_CMDOPTS, share_with=LIB_GENERATE_TASKS)
+def generate_python_code(options):
+    from arduino_rpc.code_gen import (write_code,
+                                      PYTHON_GENERATED_WARNING_MESSAGE)
     from arduino_rpc.rpc_data_frame import get_python_code
     import c_array_defs
 
@@ -196,9 +263,12 @@ def generate_python_code():
 class I2cProxy(I2cProxyMixin, Proxy):
     pass
 '''
-    f_python_code = lambda *args: get_python_code(*args,
-                                                  extra_header=extra_header,
-                                                  extra_footer=extra_footer)
+    # Prepend auto-generated warning to generated source code.
+    f_python_code = lambda *args: ((PYTHON_GENERATED_WARNING_MESSAGE %
+                                    datetime.now()) +
+                                   get_python_code(*args,
+                                                   extra_header=extra_header,
+                                                   extra_footer=extra_footer))
     methods_filter = getattr(options, 'methods_filter', DEFAULT_METHODS_FILTER)
     write_code(input_headers, input_classes, output_file, f_python_code,
                *['-I%s' % p for p in [lib_dir.abspath()] +
@@ -206,7 +276,8 @@ class I2cProxy(I2cProxyMixin, Proxy):
 
 
 @task
-def generate_config_c_code():
+@cmdopts(LIB_CMDOPTS, share_with=LIB_GENERATE_TASKS)
+def generate_config_c_code(options):
     import nanopb_helpers as npb
     from clang_helpers.data_frame import underscore_to_camelcase
     from path_helpers import path
@@ -221,27 +292,29 @@ def generate_config_c_code():
         else:
             kwargs = {}
 
-        package_name = options.PROPERTIES['package_name']
-        module_name = package_name.replace('-', '_')
-        camel_name = underscore_to_camelcase(module_name)
-        project_lib_dir = path(module_name).joinpath('Arduino', 'library', camel_name)
-        if not project_lib_dir.isdir():
-            project_lib_dir.makedirs_p()
+        name = options.PROPERTIES['name']
+        camel_name = underscore_to_camelcase(name)
+        project_lib_dir = verify_library_directory(options)
+        arduino_src_dir = project_lib_dir.joinpath('src', project_lib_dir.name)
 
         nano_pb_code = npb.compile_nanopb(proto_path, **kwargs)
-        c_output_base = project_lib_dir.joinpath('config_pb')
+        c_output_base = arduino_src_dir.joinpath('config_pb')
         c_header_path = c_output_base + '.h'
-        (c_output_base + '.c').write_bytes(nano_pb_code['source']
-                                           .replace('{{ header_path }}',
-                                                    c_header_path.name))
-        c_header_path.write_bytes(nano_pb_code['header']
-                                  .replace('PB_CONFIG_PB_H_INCLUDED',
-                                           'PB__%s__CONFIG_PB_H_INCLUDED'
-                                           % module_name.upper()))
+        with open(c_output_base + '.c', 'wb') as output:
+            print >> output, C_GENERATED_WARNING_MESSAGE % datetime.now()
+            output.write(nano_pb_code['source'].replace('{{ header_path }}',
+                         c_header_path.name))
+        with open(c_header_path, 'wb') as output:
+            print >> output, C_GENERATED_WARNING_MESSAGE % datetime.now()
+            output.write(nano_pb_code['header']
+                         .replace('PB_CONFIG_PB_H_INCLUDED',
+                                  'PB__%s__CONFIG_PB_H_INCLUDED' %
+                                  name.upper()))
 
 
 @task
-def generate_config_python_code():
+@cmdopts(LIB_CMDOPTS, share_with=LIB_GENERATE_TASKS)
+def generate_config_python_code(options):
     import nanopb_helpers as npb
     from path_helpers import path
 
@@ -256,13 +329,15 @@ def generate_config_python_code():
 
 @task
 @needs('generate_config_python_code')
-def generate_config_validate_header():
+@cmdopts(LIB_CMDOPTS, share_with=LIB_GENERATE_TASKS)
+def generate_config_validate_header(options):
     sketch_dir = options.rpc_module.get_sketch_directory()
     generate_validate_header('Config', sketch_dir)
 
 
 @task
 @needs('generate_config_python_code')
+@cmdopts(LIB_CMDOPTS, share_with=LIB_GENERATE_TASKS)
 def generate_state_validate_header():
     sketch_dir = options.rpc_module.get_sketch_directory()
     generate_validate_header('State', sketch_dir)
@@ -318,4 +393,18 @@ def build_firmware():
        'setuptools.command.sdist')
 def sdist():
     """Overrides sdist to make sure that our setup.py is generated."""
+    pass
+
+
+@task
+@needs('generate_setup', 'minilib', 'generate_library_main_header',
+       'generate_config_c_code', 'generate_config_python_code',
+       'generate_command_processor_header', 'generate_rpc_buffer_header',
+       'generate_python_code')
+@cmdopts(LIB_CMDOPTS, share_with=LIB_GENERATE_TASKS)
+def generate_all_code(options):
+    '''
+    Generate all C++ (device) and Python (host) code, but do not compile
+    device sketch.
+    '''
     pass

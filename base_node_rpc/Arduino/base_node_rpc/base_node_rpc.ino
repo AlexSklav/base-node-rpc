@@ -3,11 +3,13 @@
 #include "SPI.h"
 #include "Wire.h"
 #include "Memory.h"
+#include "ArduinoRpc.h"
 #include "nanopb.h"
 #include "NadaMQ.h"
 #include "CArrayDefs.h"
 #include "RPCBuffer.h"
 #include "NodeCommandProcessor.h"
+#include "BaseNodeRpc.h"
 #include "Node.h"
 
 
