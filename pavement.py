@@ -37,7 +37,7 @@ options(
                url=URL,
                license='GPLv2',
                install_requires=['arduino_scons>=0.1.post8',
-                                 'arduino-rpc>=1.6.post20',
+                                 'arduino-rpc>=1.6.post21',
                                  'protobuf>=2.6.1'],
                # Install data listed in `MANIFEST.in`
                include_package_data=True,
