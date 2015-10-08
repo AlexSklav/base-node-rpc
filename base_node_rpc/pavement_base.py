@@ -20,9 +20,11 @@ def get_base_classes_and_headers(options, lib_dir, sketch_dir):
        `base-node-rpc` library directory.
      - rpc classes refer to classes found in the sketch directory.
     '''
+
+    package_name = options.PROPERTIES['package_name']
+    module_name = package_name.replace('-', '_')
     base_classes = getattr(options, 'base_classes', DEFAULT_BASE_CLASSES)
-    rpc_classes = getattr(options, 'rpc_classes', [options.PROPERTIES['name'] +
-                                                   '::Node'])
+    rpc_classes = getattr(options, 'rpc_classes', [module_name + '::Node'])
 
     input_classes = ['BaseNode'] + base_classes + rpc_classes
     input_headers = ([lib_dir.joinpath('BaseNodeRpc', 'BaseNode.h')] +
@@ -79,9 +81,8 @@ def generate_validate_header(message_name, sketch_dir):
 @task
 def generate_rpc_buffer_header():
     import arduino_rpc.rpc_data_frame as rpc_df
-
-    output_dir = (path(options.PROPERTIES['name'])
-                  .joinpath('Arduino', options.PROPERTIES['name']))
+    module_name = options.PROPERTIES['package_name'].replace('-', '_')
+    output_dir = path(module_name).joinpath('Arduino', module_name)
     rpc_df.generate_rpc_buffer_header(output_dir, source_dir=output_dir)
 
 
@@ -121,24 +122,25 @@ def generate_command_processor_header():
     import c_array_defs
     import jinja2
 
-    name = options.PROPERTIES['name']
-    sketch_dir = path(name).joinpath('Arduino', name)
+    package_name = options.PROPERTIES['package_name']
+    module_name = package_name.replace('-', '_')
+    sketch_dir = path(module_name).joinpath('Arduino', module_name)
     lib_dir = base_node_rpc.get_lib_directory()
 
     input_classes, input_headers = get_base_classes_and_headers(options,
                                                                 lib_dir,
                                                                 sketch_dir)
-    camel_name = underscore_to_camelcase(name)
+    camel_name = underscore_to_camelcase(module_name)
 
-    sketch_dir = path(name).joinpath('Arduino', name)
+    sketch_dir = path(module_name).joinpath('Arduino', module_name)
 
-    project_lib_dir = path(name).joinpath('Arduino', 'library', camel_name)
+    project_lib_dir = path(module_name).joinpath('Arduino', 'library', camel_name)
     if not project_lib_dir.isdir():
         project_lib_dir.makedirs_p()
 
     with project_lib_dir.joinpath('Properties.h').open('wb') as output:
-        print >> output, '#ifndef ___%s__PROPERTIES___' % name.upper()
-        print >> output, '#define ___%s__PROPERTIES___' % name.upper()
+        print >> output, '#ifndef ___%s__PROPERTIES___' % module_name.upper()
+        print >> output, '#define ___%s__PROPERTIES___' % module_name.upper()
         print >> output, ''
         for k, v in options.PROPERTIES.iteritems():
             print >> output, '#ifndef BASE_NODE__%s' % k.upper()
@@ -156,7 +158,7 @@ def generate_command_processor_header():
 #include "{{ camel_name }}/CommandProcessor.h"
 
 #endif  // #ifndef ___{{ name.upper()  }}___''')
-        print >> output, template.render(name=name, camel_name=camel_name)
+        print >> output, template.render(name=module_name, camel_name=camel_name)
         print >> output, ''
 
     headers = {'Commands': get_c_commands_header_code,
@@ -166,7 +168,7 @@ def generate_command_processor_header():
 
     for k, f in headers.iteritems():
         output_header = project_lib_dir.joinpath('%s.h' % k)
-        f_get_code = lambda *args_: f(*(args_ + (name, )))
+        f_get_code = lambda *args_: f(*(args_ + (module_name, )))
 
         write_code(input_headers, input_classes, output_header, f_get_code,
                    *['-I%s' % p for p in [lib_dir.abspath()] +
@@ -180,10 +182,11 @@ def generate_python_code():
     from arduino_rpc.rpc_data_frame import get_python_code
     import c_array_defs
 
-    name = options.PROPERTIES['name']
-    sketch_dir = path(name).joinpath('Arduino', name)
+    package_name = options.PROPERTIES['package_name']
+    module_name = package_name.replace('-', '_')
+    sketch_dir = path(module_name).joinpath('Arduino', module_name)
     lib_dir = base_node_rpc.get_lib_directory()
-    output_file = path(name).joinpath('node.py')
+    output_file = path(module_name).joinpath('node.py')
     input_classes, input_headers = get_base_classes_and_headers(options,
                                                                 lib_dir,
                                                                 sketch_dir)
@@ -218,9 +221,10 @@ def generate_config_c_code():
         else:
             kwargs = {}
 
-        name = options.PROPERTIES['name']
-        camel_name = underscore_to_camelcase(name)
-        project_lib_dir = path(name).joinpath('Arduino', 'library', camel_name)
+        package_name = options.PROPERTIES['package_name']
+        module_name = package_name.replace('-', '_')
+        camel_name = underscore_to_camelcase(module_name)
+        project_lib_dir = path(module_name).joinpath('Arduino', 'library', camel_name)
         if not project_lib_dir.isdir():
             project_lib_dir.makedirs_p()
 
@@ -233,7 +237,7 @@ def generate_config_c_code():
         c_header_path.write_bytes(nano_pb_code['header']
                                   .replace('PB_CONFIG_PB_H_INCLUDED',
                                            'PB__%s__CONFIG_PB_H_INCLUDED'
-                                           % name.upper()))
+                                           % module_name.upper()))
 
 
 @task
@@ -246,7 +250,7 @@ def generate_config_python_code():
 
     if proto_path.isfile():
         pb_code = npb.compile_pb(proto_path)
-        output_path = path(options.PROPERTIES['name']).joinpath('config.py')
+        output_path = path(options.PROPERTIES['package_name'].replace('-', '_')).joinpath('config.py')
         output_path.write_bytes(pb_code['python'])
 
 
@@ -284,7 +288,7 @@ def init_config():
 
     if not output_path.isfile() or overwrite:
         output = jinja2.Template(template).render(package=
-                                                  options.PROPERTIES['name'])
+                                                  options.PROPERTIES['package_name'])
         output_path.write_bytes(output)
     else:
         raise IOError('Output path exists.  Use `overwrite` to force '

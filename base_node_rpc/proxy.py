@@ -49,12 +49,14 @@ class ProxyBase(object):
         if url:
             webbrowser.open_new_tab(url)
 
+    @property
     def properties(self):
         import pandas as pd
 
         return pd.Series(OrderedDict([(k, getattr(self, k)().tostring())
                                       for k in ['base_node_software_version',
-                                                'name', 'manufacturer', 'url',
+                                                'package_name', 'display_name',
+                                                'manufacturer', 'url',
                                                 'software_version']
                                       if hasattr(self, k)]))
 

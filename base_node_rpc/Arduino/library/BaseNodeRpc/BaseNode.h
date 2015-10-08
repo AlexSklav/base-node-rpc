@@ -21,11 +21,16 @@ const char BASE_NODE_SOFTWARE_VERSION_[] PROGMEM =
 #else
 const char BASE_NODE_SOFTWARE_VERSION_[] PROGMEM = "";
 #endif
-#ifdef BASE_NODE__NAME
-const char NAME_[] PROGMEM = BASE_NODE__NAME;
+#ifdef BASE_NODE__PACKAGE_NAME
+const char PACKAGE_NAME_[] PROGMEM = BASE_NODE__PACKAGE_NAME;
 #else
-const char NAME_[] PROGMEM = "";
-#endif  // #ifdef BASE_NODE__NAME
+const char PACKAGE_NAME_[] PROGMEM = "";
+#endif  // #ifdef BASE_NODE__PACKAGE_NAME
+#ifdef BASE_NODE__DISPLAY_NAME
+const char DISPLAY_NAME_[] PROGMEM = BASE_NODE__DISPLAY_NAME;
+#else
+const char DISPLAY_NAME_[] PROGMEM = "";
+#endif  // #ifdef BASE_NODE__PACKAGE_NAME
 #ifdef BASE_NODE__MANUFACTURER
 const char MANUFACTURER_[] PROGMEM = BASE_NODE__MANUFACTURER;
 #else
@@ -59,7 +64,8 @@ public:
   UInt8Array base_node_software_version() {
     return prog_string(BASE_NODE_SOFTWARE_VERSION_, get_buffer());
   }
-  UInt8Array name() { return prog_string(NAME_, get_buffer()); }
+  UInt8Array package_name() { return prog_string(PACKAGE_NAME_, get_buffer()); }
+  UInt8Array display_name() { return prog_string(DISPLAY_NAME_, get_buffer()); }
   UInt8Array manufacturer() {
     return prog_string(MANUFACTURER_, get_buffer());
   }

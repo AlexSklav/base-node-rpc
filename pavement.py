@@ -17,12 +17,12 @@ PROJECT_PREFIX = [d for d in path('.').dirs()
 rpc_module = import_module(PROJECT_PREFIX)
 VERSION = version.getVersion()
 URL='http://github.com/wheeler-microfluidics/%s.git' % PROJECT_PREFIX
-PROPERTIES = OrderedDict([('name', PROJECT_PREFIX),
+package_name = PROJECT_PREFIX.replace('_', '-')
+PROPERTIES = OrderedDict([('package_name', package_name),
                           ('base_node_version', VERSION),
                           ('manufacturer', 'Wheeler Lab'),
                           ('software_version', VERSION),
                           ('url', URL)])
-package_name = PROJECT_PREFIX.replace('_', '-')
 print 'package_name', package_name
 
 options(
