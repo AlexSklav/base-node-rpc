@@ -1,31 +1,15 @@
 from datetime import datetime
-import os
-import shutil
 import warnings
 
 from paver.easy import task, needs, path, sh, cmdopts, options
 import base_node_rpc
-
-
-def recursive_overwrite(src, dest, ignore=None):
-    '''
-    http://stackoverflow.com/questions/12683834/how-to-copy-directory-recursively-in-python-and-overwrite-all#15824216
-    '''
-    if os.path.isdir(src):
-        if not os.path.isdir(dest):
-            os.makedirs(dest)
-        files = os.listdir(src)
-        if ignore is not None:
-            ignored = ignore(src, files)
-        else:
-            ignored = set()
-        for f in files:
-            if f not in ignored:
-                recursive_overwrite(os.path.join(src, f),
-                                    os.path.join(dest, f),
-                                    ignore)
-    else:
-        shutil.copyfile(src, dest)
+try:
+    from arduino_rpc.pavement_base import *
+except ImportError:
+    # Ignore import error to allow import during installation of
+    # `base-node-rpc` (i.e., prior to the installation of `arduino-rpc` through
+    # install dependencies).
+    pass
 
 
 DEFAULT_BASE_CLASSES = ['BaseNodeSerialHandler', 'BaseNodeEeprom',
@@ -34,29 +18,6 @@ DEFAULT_METHODS_FILTER = lambda df: df[~(df.method_name
                                          .isin(['get_config_fields',
                                                 'get_state_fields']))].copy()
 prefix = 'base_node_rpc.pavement_base.'
-LIB_GENERATE_TASKS = [prefix + h for h in
-                      ('generate_command_processor_header',
-                       'generate_config_c_code', 'generate_rpc_buffer_header',
-                       'generate_all_code')]
-LIB_CMDOPTS = [('lib_out_dir=', 'o', 'Output directory for Arduino library.')]
-
-
-def verify_library_directory(options):
-    '''
-    Must be called from task function accepting `LIB_CMDOPTS` as `cmdopts`.
-    '''
-    import inspect
-
-    from clang_helpers.data_frame import underscore_to_camelcase
-
-    cmd_opts = getattr(options, inspect.currentframe().f_back.f_code.co_name)
-    output_dir = path(getattr(cmd_opts, 'lib_out_dir',
-                              options.rpc_module.get_lib_directory()))
-    name = options.PROPERTIES['name']
-    camel_name = underscore_to_camelcase(name)
-    library_dir = output_dir.joinpath(camel_name)
-    library_dir.makedirs_p()
-    return library_dir
 
 
 def get_base_classes_and_headers(options, lib_dir, sketch_dir):
@@ -129,19 +90,6 @@ def generate_validate_header(message_name, sketch_dir):
 
 @task
 @cmdopts(LIB_CMDOPTS, share_with=LIB_GENERATE_TASKS)
-def copy_existing_headers(options):
-    project_lib_dir = verify_library_directory(options)
-    source_dir = options.rpc_module.get_lib_directory()
-    output_dir = project_lib_dir.parent
-    if source_dir == output_dir:
-        print 'Output library directory is same as source - do not copy.'
-    else:
-        print 'Output library directory differs from source - copy.'
-        recursive_overwrite(source_dir, output_dir)
-
-
-@task
-@cmdopts(LIB_CMDOPTS, share_with=LIB_GENERATE_TASKS)
 def generate_rpc_buffer_header(options):
     import arduino_rpc.rpc_data_frame as rpc_df
     sketch_dir = options.rpc_module.get_sketch_directory()
@@ -198,6 +146,8 @@ def generate_command_processor_header(options):
     sketch_dir = path(name).joinpath('Arduino', name)
     project_lib_dir = verify_library_directory(options)
     arduino_src_dir = project_lib_dir.joinpath('src', project_lib_dir.name)
+    if not arduino_src_dir.isdir():
+        arduino_src_dir.makedirs_p()
 
     with arduino_src_dir.joinpath('Properties.h').open('wb') as output:
         print >> output, C_GENERATED_WARNING_MESSAGE % datetime.now()
@@ -279,8 +229,6 @@ class I2cProxy(I2cProxyMixin, Proxy):
 @cmdopts(LIB_CMDOPTS, share_with=LIB_GENERATE_TASKS)
 def generate_config_c_code(options):
     import nanopb_helpers as npb
-    from clang_helpers.data_frame import underscore_to_camelcase
-    from path_helpers import path
 
     sketch_dir = options.rpc_module.get_sketch_directory()
     proto_path = sketch_dir.joinpath('config.proto').abspath()
@@ -293,7 +241,6 @@ def generate_config_c_code(options):
             kwargs = {}
 
         name = options.PROPERTIES['name']
-        camel_name = underscore_to_camelcase(name)
         project_lib_dir = verify_library_directory(options)
         arduino_src_dir = project_lib_dir.joinpath('src', project_lib_dir.name)
 
@@ -341,6 +288,13 @@ def generate_config_validate_header(options):
 def generate_state_validate_header():
     sketch_dir = options.rpc_module.get_sketch_directory()
     generate_validate_header('State', sketch_dir)
+
+
+@task
+@needs('generate_all_code',
+       'arduino_rpc.pavement_base.build_arduino_library')
+def build_arduino_library(options):
+    pass
 
 
 @task

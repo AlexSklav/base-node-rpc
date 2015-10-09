@@ -28,6 +28,7 @@ LIB_PROPERTIES.update(OrderedDict([('author', 'Christian Fobel'),
                                    ('author_email', 'christian@fobel.net'),
                                    ('short_description', 'Base classes for '
                                     'Arduino RPC node/device.'),
+                                   ('version', VERSION),
                                    ('long_description',
 'Provides: 1) A memory-efficient set of base classes providing an API to most '
 'of the Arduino API, including EEPROM access, raw I2C '
@@ -43,6 +44,7 @@ print 'package_name', package_name
 options(
     rpc_module=rpc_module,
     PROPERTIES=PROPERTIES,
+    LIB_PROPERTIES=LIB_PROPERTIES,
     DEFAULT_ARDUINO_BOARDS=DEFAULT_ARDUINO_BOARDS,
     setup=dict(name=package_name,
                version=VERSION,
@@ -61,25 +63,12 @@ options(
 
 @task
 @cmdopts(LIB_CMDOPTS, share_with=LIB_GENERATE_TASKS)
-def generate_arduino_library_properties(options):
-    import jinja2
-    import arduino_rpc
-
-    template = jinja2.Template(open(arduino_rpc.get_library_directory()
-                                    .joinpath('library.properties.t'),
-                                    'rb').read())
-    library_dir = verify_library_directory(options)
-    library_properties = library_dir.joinpath('library.properties')
-    with library_properties.open('wb') as output:
-        output.write(template.render(LIB_PROPERTIES))
-
-
-@task
-@cmdopts(LIB_CMDOPTS, share_with=LIB_GENERATE_TASKS)
 def generate_library_main_header(options):
     library_dir = verify_library_directory(options)
     library_header = library_dir.joinpath('src', 'BaseNodeRpc.h')
     print library_header
+    if not library_header.isdir():
+        library_header.parent.makedirs_p()
     with library_header.open('wb') as output:
         output.write('''
 #ifndef ___BASE_NODE_RPC__H___
@@ -88,24 +77,10 @@ def generate_library_main_header(options):
 #ifndef BASE_NODE__BASE_NODE_SOFTWARE_VERSION
 #define BASE_NODE__BASE_NODE_SOFTWARE_VERSION   "%s"
 #endif
-#include "BaseNode.h"
+#include "BaseNodeRpc/BaseNode.h"
 
 #endif  // #ifndef ___BASE_NODE_RPC__H___
     '''.strip() % options.PROPERTIES['software_version'])
-
-
-@task
-@needs('generate_all_code', 'generate_arduino_library_properties')
-def build_arduino_library():
-    import zipfile
-    from arduino_rpc import get_library_directory
-
-    library_dir = verify_library_directory(options)
-    zf = zipfile.ZipFile(library_dir + '.zip', mode='w')
-
-    for f in library_dir.walkfiles():
-        zf.write(f, arcname=library_dir.relpathto(f))
-    zf.close()
 
 
 @task
