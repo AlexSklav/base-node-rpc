@@ -9,7 +9,8 @@ except ImportError:
     # Ignore import error to allow import during installation of
     # `base-node-rpc` (i.e., prior to the installation of `arduino-rpc` through
     # install dependencies).
-    pass
+    LIB_CMDOPTS = None
+    LIB_GENERATE_TASKS = None
 
 
 DEFAULT_BASE_CLASSES = ['BaseNodeSerialHandler', 'BaseNodeEeprom',
