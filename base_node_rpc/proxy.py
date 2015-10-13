@@ -208,6 +208,11 @@ class SerialProxyMixin(object):
                         is None) or (self.properties['package_name'] ==
                                      self.host_package_name):
                         return
-                except:
+                    else: # not the device we're looking for
+                        self.terminate()
+                        break
+                except: # free the serial port if there was an exception
                     self.terminate()
+                    raise
+                    
         raise IOError('Device not found on any port.')
