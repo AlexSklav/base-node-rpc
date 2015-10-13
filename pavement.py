@@ -84,20 +84,6 @@ def generate_library_main_header(options):
 
 
 @task
-@needs('generate_setup', 'minilib', 'generate_library_main_header',
-       'generate_config_c_code', 'generate_config_python_code',
-       'generate_command_processor_header', 'generate_rpc_buffer_header',
-       'generate_python_code')
-@cmdopts(LIB_CMDOPTS, share_with=LIB_GENERATE_TASKS)
-def generate_all_code(options):
-    '''
-    Generate all C++ (device) and Python (host) code, but do not compile
-    device sketch.
-    '''
-    pass
-
-
-@task
 @needs('generate_library_main_header', 'generate_config_c_code',
        'generate_config_python_code', 'generate_command_processor_header',
        'generate_rpc_buffer_header',

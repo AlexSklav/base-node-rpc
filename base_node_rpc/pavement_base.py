@@ -143,7 +143,7 @@ def generate_command_processor_header(options):
                                                                 sketch_dir)
     camel_name = underscore_to_camelcase(module_name)
 
-    sketch_dir = path(name).joinpath('Arduino', name)
+    sketch_dir = path(module_name).joinpath('Arduino', module_name)
     project_lib_dir = verify_library_directory(options)
     arduino_src_dir = project_lib_dir.joinpath('src', project_lib_dir.name)
     if not arduino_src_dir.isdir():
@@ -151,8 +151,8 @@ def generate_command_processor_header(options):
 
     with arduino_src_dir.joinpath('Properties.h').open('wb') as output:
         print >> output, C_GENERATED_WARNING_MESSAGE % datetime.now()
-        print >> output, '#ifndef ___%s__PROPERTIES___' % name.upper()
-        print >> output, '#define ___%s__PROPERTIES___' % name.upper()
+        print >> output, '#ifndef ___%s__PROPERTIES___' % module_name.upper()
+        print >> output, '#define ___%s__PROPERTIES___' % module_name.upper()
         print >> output, ''
         for k, v in options.PROPERTIES.iteritems():
             print >> output, '#ifndef BASE_NODE__%s' % k.upper()
@@ -171,7 +171,8 @@ def generate_command_processor_header(options):
 
 #endif  // #ifndef ___{{ name.upper()  }}___''')
         print >> output, C_GENERATED_WARNING_MESSAGE % datetime.now()
-        print >> output, template.render(name=name, camel_name=camel_name)
+        print >> output, template.render(name=module_name,
+                                         camel_name=camel_name)
         print >> output, ''
 
     headers = {'Commands': get_c_commands_header_code,
@@ -183,7 +184,8 @@ def generate_command_processor_header(options):
         output_header = arduino_src_dir.joinpath('%s.h' % k)
         # Prepend auto-generated warning to generated source code.
         f_get_code = lambda *args_: ((C_GENERATED_WARNING_MESSAGE %
-                                      datetime.now()) + f(*(args_ + (name, ))))
+                                      datetime.now()) + f(*(args_ +
+                                                            (module_name, ))))
 
         write_code(input_headers, input_classes, output_header, f_get_code,
                    *['-I%s' % p for p in [lib_dir.abspath()] +
@@ -240,7 +242,7 @@ def generate_config_c_code(options):
         else:
             kwargs = {}
 
-        name = options.PROPERTIES['name']
+        name = options.PROPERTIES['package_name']
         project_lib_dir = verify_library_directory(options)
         arduino_src_dir = project_lib_dir.joinpath('src', project_lib_dir.name)
 

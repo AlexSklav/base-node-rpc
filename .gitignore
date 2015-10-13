@@ -8,10 +8,7 @@ setup.py
 paver-minilib.zip
 build/*
 */*_pb2.py
-*/Arduino/library/*/BaseNodeRPC.h
-*/Arduino/library/*/src/*/CommandProcessor.h
-*/Arduino/library/*/src/*/Commands.h
-*/Arduino/library/*/src/*/Properties.h
+*/Arduino/library
 */Arduino/*/NodeCommandProcessor.h
 */Arduino/*/RPCBuffer.h
 */lib
