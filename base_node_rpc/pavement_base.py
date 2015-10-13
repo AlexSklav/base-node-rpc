@@ -232,6 +232,7 @@ class I2cProxy(I2cProxyMixin, Proxy):
 @cmdopts(LIB_CMDOPTS, share_with=LIB_GENERATE_TASKS)
 def generate_config_c_code(options):
     import nanopb_helpers as npb
+    from arduino_rpc.code_gen import C_GENERATED_WARNING_MESSAGE
 
     sketch_dir = options.rpc_module.get_sketch_directory()
     proto_path = sketch_dir.joinpath('config.proto').abspath()
@@ -246,6 +247,8 @@ def generate_config_c_code(options):
         name = options.PROPERTIES['package_name']
         project_lib_dir = verify_library_directory(options)
         arduino_src_dir = project_lib_dir.joinpath('src', project_lib_dir.name)
+        if not arduino_src_dir.isdir():
+            arduino_src_dir.makedirs_p()
 
         nano_pb_code = npb.compile_nanopb(proto_path, **kwargs)
         c_output_base = arduino_src_dir.joinpath('config_pb')
