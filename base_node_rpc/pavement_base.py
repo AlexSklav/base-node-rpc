@@ -295,6 +295,7 @@ def generate_state_validate_header():
 @task
 @needs('generate_all_code',
        'arduino_rpc.pavement_base.build_arduino_library')
+@cmdopts(LIB_CMDOPTS, share_with=LIB_GENERATE_TASKS)
 def build_arduino_library(options):
     pass
 
