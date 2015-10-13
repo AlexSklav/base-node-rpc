@@ -49,6 +49,12 @@ class SerialStream(object):
 
     def read(self):
         return self.serial_device.read(self.serial_device.inWaiting())
+    
+    def write(self, str):
+        self.serial_device.write(str)
+        
+    def close(self):
+        self.serial_device.close()
 
 
 class FakeStream(object):

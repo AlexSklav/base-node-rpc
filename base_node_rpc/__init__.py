@@ -1,10 +1,11 @@
 from collections import OrderedDict
 
 try:
-    from .node import Proxy, I2cProxy
+    from .node import Proxy, I2cProxy, SerialProxy
 except (ImportError, TypeError):
     Proxy = None
     I2cProxy = None
+    SerialProxy = None
 
 
 def package_path():

@@ -8,17 +8,33 @@ from .queue import SerialStream, PacketWatcher
 
 
 class ProxyBase(object):
-    def __init__(self, serial, buffer_bounds_check=True, high_water_mark=10):
-        self._serial = serial
+    host_package_name = None    
+    
+    def __init__(self, stream, buffer_bounds_check=True, high_water_mark=10,
+                 auto_close_stream=False):
         self._buffer_bounds_check = buffer_bounds_check
         self._buffer_size = None
         self._packet_watcher = None
-        self._reset_packet_watcher(serial, high_water_mark)
         self._timeout_s = 0.5
+        self._auto_close_stream = True
+        self._stream = stream
+        self._reset_packet_watcher(stream, high_water_mark)
 
-    def _reset_packet_watcher(self, serial, high_water_mark):
-        stream = SerialStream(serial)
-        packet_watcher = PacketWatcher(stream, high_water_mark=high_water_mark)
+    def reset(self):
+        self._reset_packet_watcher(self.stream, self.high_water_mark)
+    
+    @property
+    def stream(self):
+        return self._stream
+    
+    @stream.setter
+    def stream(self, stream):
+        self._stream = stream
+        self.reset()
+
+    def _reset_packet_watcher(self, stream, high_water_mark):
+        packet_watcher = PacketWatcher(stream,
+                                       high_water_mark=high_water_mark)
         packet_watcher.start()
 
         # Terminate existing watcher thread.
@@ -27,8 +43,6 @@ class ProxyBase(object):
 
         # Set new watcher.
         self._packet_watcher = packet_watcher
-        self._serial = serial
-        self._stream = stream
         self._packet_watcher.enabled = True
 
     @property
@@ -96,7 +110,7 @@ class ProxyBase(object):
 
         self._packet_watcher.enabled = False
         try:
-            self._serial.write(packet.tostring())
+            self._stream.write(packet.tostring())
             result = self._read_response()
         finally:
             self._packet_watcher.enabled = True
@@ -118,6 +132,8 @@ class ProxyBase(object):
 
     def terminate(self):
         self._packet_watcher.terminate()
+        if self._auto_close_stream:
+            self._stream.close()
 
     def __del__(self):
         self.terminate()
@@ -137,50 +153,61 @@ class I2cProxyMixin(object):
         pass
 
 
-def connect(proxy_class, baudrate=115200, name=None, verify=None,
-            retry_count=6, high_water_mark=None, port=None):
-    '''
-    Attempt to auto-connect to a proxy.
+class SerialProxyMixin(object):
+    def __init__(self, **kwargs):
+        '''
+        Attempt to auto-connect to a proxy.
+    
+        If `name` is specified, only connect to proxy matching name.
+        If `verify` callback is specified, only connect to proxy where `verify`
+        returns `True`.
+        '''
+        # Import here, since other classes in this file do not depend on serial
+        # libraries directly.
+        from serial import Serial
+        from serial_device import get_serial_ports
+    
+        baudrate = kwargs.pop('baudrate', 115200)
+        retry_count = kwargs.pop('retry_count', 6)        
+        port = kwargs.pop('port', None)
+        auto_close_stream = kwargs.pop('auto_close_stream', True)
+        if not auto_close_stream:
+            raise ValueError('auto_close_stream must be set to true for '
+                             'classes derived from SerialProxyMixin')
 
-    If `name` is specified, only connect to proxy matching name.
-    If `verify` callback is specified, only connect to proxy where `verify`
-    returns `True`.
-    '''
-    # Import here, since other classes in this file do not depend on serial
-    # libraries directly.
-    from serial import Serial
-    from serial_device import get_serial_ports
+        if port is None:
+            ports = get_serial_ports()
+        else:
+            ports = [port]
 
-    if name and verify is None:
-        verify = lambda p: p.properties()['name'] == name
+        first_port = True
+        for port in ports:
+            for i in xrange(retry_count):
+                serial_device = Serial(port, baudrate=baudrate)
+                stream = SerialStream(serial_device)
+                
+                if first_port:
+                    super(SerialProxyMixin, self).__init__(stream,
+                                                           auto_close_stream=
+                                                           auto_close_stream,
+                                                           **kwargs)
+                    first_port = False
+                else:
+                    self.stream = stream
+                    
+                time.sleep(.5 * i)
 
-    if port is None:
-        ports = get_serial_ports()
-    else:
-        ports = [port]
-
-    for port in ports:
-        for i in xrange(retry_count):
-            serial_device = Serial(port, baudrate=baudrate)
-            time.sleep(.5 * i)
-            kwargs = {}
-            if high_water_mark:
-                kwargs['high_water_mark'] = high_water_mark
-            proxy = proxy_class(serial_device, **kwargs)
-            try:
-                proxy.ram_free()
-            except IOError:
-                if i >= retry_count - 1: raise
-                proxy.terminate()
-                serial_device.close()
-                continue
-            if verify is None:
-                return proxy
-            else:
                 try:
-                    if verify(proxy):
-                        return proxy
+                    self.ram_free()
+                except IOError:
+                    if i >= retry_count - 1: raise
+                    self.terminate()
+                    continue
+                try:
+                    if (self.host_package_name
+                        is None) or (self.properties['package_name'] ==
+                                     self.host_package_name):
+                        return
                 except:
-                    proxy.terminate()
-                    serial_device.close()
-    raise IOError('Device not found on any port.')
+                    self.terminate()
+        raise IOError('Device not found on any port.')

@@ -210,10 +210,15 @@ def generate_python_code(options):
     input_classes, input_headers = get_base_classes_and_headers(options,
                                                                 lib_dir,
                                                                 sketch_dir)
-    extra_header = ('from base_node_rpc.proxy import ProxyBase, I2cProxyMixin')
+    extra_header = ('from base_node_rpc.proxy import ProxyBase, '
+                    'I2cProxyMixin, SerialProxyMixin')
     extra_footer = '''
 
 class I2cProxy(I2cProxyMixin, Proxy):
+    pass
+
+
+class SerialProxy(SerialProxyMixin, Proxy):
     pass
 '''
     # Prepend auto-generated warning to generated source code.
