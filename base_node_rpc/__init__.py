@@ -41,7 +41,8 @@ def get_includes():
     '''
     import arduino_rpc
 
-    return [get_lib_directory()] + arduino_rpc.get_includes()
+    return list(get_lib_directory()
+                .walkdirs('src')) + arduino_rpc.get_includes()
 
 
 def get_sources():

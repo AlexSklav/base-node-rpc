@@ -1,7 +1,7 @@
 #ifndef ___BASE_HANDLER__H___
 #define ___BASE_HANDLER__H___
 
-#include <CommandPacketHandler.h>
+#include <ArduinoRpc/CommandPacketHandler.h>
 
 
 namespace base_node_rpc {

@@ -1,7 +1,7 @@
 #ifndef ___NODE__H___
 #define ___NODE__H___
 
-#include <BaseNodeRpc/BaseNodeRpc.h>
+#include <CArrayDefs.h>
 #include <BaseNodeRpc/BaseNodeEeprom.h>
 #include <BaseNodeRpc/BaseNodeI2c.h>
 #include <BaseNodeRpc/BaseNodeSpi.h>

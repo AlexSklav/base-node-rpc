@@ -23,11 +23,28 @@ PROPERTIES = OrderedDict([('package_name', package_name),
                           ('manufacturer', 'Wheeler Lab'),
                           ('software_version', VERSION),
                           ('url', URL)])
+LIB_PROPERTIES = PROPERTIES.copy()
+LIB_PROPERTIES.update(OrderedDict([('author', 'Christian Fobel'),
+                                   ('author_email', 'christian@fobel.net'),
+                                   ('short_description', 'Base classes for '
+                                    'Arduino RPC node/device.'),
+                                   ('version', VERSION),
+                                   ('long_description',
+'Provides: 1) A memory-efficient set of base classes providing an API to most '
+'of the Arduino API, including EEPROM access, raw I2C '
+'master-write/slave-request, etc., and 2) Support for processing RPC command '
+'requests through either serial or I2C interface.  Utilizes Python (host) and '
+'C++ (device) code generation from the `arduino_rpc` '
+'(http://github.com/wheeler-microfluidics/arduino_rpc.git) package.'),
+                                   ('category', 'Communication'),
+                                   ('architectures', 'avr')]))
+package_name = PROJECT_PREFIX.replace('_', '-')
 print 'package_name', package_name
 
 options(
     rpc_module=rpc_module,
     PROPERTIES=PROPERTIES,
+    LIB_PROPERTIES=LIB_PROPERTIES,
     DEFAULT_ARDUINO_BOARDS=DEFAULT_ARDUINO_BOARDS,
     setup=dict(name=package_name,
                version=VERSION,
@@ -37,7 +54,7 @@ options(
                url=URL,
                license='GPLv2',
                install_requires=['arduino_scons>=0.1.post8',
-                                 'arduino-rpc>=1.6.post21',
+                                 'arduino-rpc>=1.7.post3',
                                  'protobuf>=2.6.1'],
                # Install data listed in `MANIFEST.in`
                include_package_data=True,
@@ -45,39 +62,25 @@ options(
 
 
 @task
-def generate_library_main_header():
-    library_header = (base_node_rpc.get_lib_directory()
-                    .joinpath('BaseNodeRpc', 'BaseNodeRpc.h'))
-    library_header.write_bytes('''
+@cmdopts(LIB_CMDOPTS, share_with=LIB_GENERATE_TASKS)
+def generate_library_main_header(options):
+    library_dir = verify_library_directory(options)
+    library_header = library_dir.joinpath('src', 'BaseNodeRpc.h')
+    print library_header
+    if not library_header.isdir():
+        library_header.parent.makedirs_p()
+    with library_header.open('wb') as output:
+        output.write('''
 #ifndef ___BASE_NODE_RPC__H___
 #define ___BASE_NODE_RPC__H___
 
 #ifndef BASE_NODE__BASE_NODE_SOFTWARE_VERSION
 #define BASE_NODE__BASE_NODE_SOFTWARE_VERSION   "%s"
 #endif
-#include "BaseNode.h"
+#include "BaseNodeRpc/BaseNode.h"
 
 #endif  // #ifndef ___BASE_NODE_RPC__H___
     '''.strip() % options.PROPERTIES['software_version'])
-
-
-@task
-@needs('generate_library_main_header')
-def build_arduino_library():
-    import os
-    import tarfile
-
-    package_lib_dir = path('base_node_rpc').joinpath('lib')
-    if not package_lib_dir.isdir():
-        package_lib_dir.mkdir()
-    tf = tarfile.TarFile.bz2open(package_lib_dir
-                                 .joinpath('BaseNodeRpc-Arduino.tar.gz'), 'w')
-    version_path = (base_node_rpc.get_lib_directory()
-                    .joinpath('RELEASE-VERSION'))
-    version_path.write_bytes(VERSION)
-    for s in base_node_rpc.get_lib_directory().walkfiles():
-        tf.add(s, os.path.join('BaseNodeRpc', os.path.basename(s)))
-    tf.close()
 
 
 @task
@@ -89,6 +92,17 @@ def build_firmware():
     '''
     Override `pavement_base.build_firmware` to generate header with version
     number.
+    '''
+    pass
+
+
+@task
+@needs('base_node_rpc.pavement_base.generate_all_code')
+@cmdopts(LIB_CMDOPTS, share_with=LIB_GENERATE_TASKS)
+def generate_all_code(options):
+    '''
+    Generate all C++ (device) and Python (host) code, but do not compile
+    device sketch.
     '''
     pass
 
