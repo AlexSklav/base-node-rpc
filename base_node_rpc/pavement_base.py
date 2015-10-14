@@ -337,9 +337,7 @@ def init_config():
 
 
 @task
-@needs('generate_config_c_code', 'generate_config_python_code',
-       'generate_config_validate_header', 'generate_state_validate_header',
-       'generate_command_processor_header', 'generate_rpc_buffer_header')
+@needs('generate_all_code')
 @cmdopts([('sconsflags=', 'f', 'Flags to pass to SCons.'),
           ('boards=', 'b', 'Comma-separated list of board names to compile '
            'for (e.g., `uno`).')])
@@ -355,7 +353,7 @@ def build_firmware():
 
 
 @task
-@needs('generate_setup', 'minilib', 'build_firmware', 'generate_python_code',
+@needs('build_arduino_library', 'build_firmware', 'generate_setup', 'minilib',
        'setuptools.command.sdist')
 def sdist():
     """Overrides sdist to make sure that our setup.py is generated."""
@@ -363,10 +361,9 @@ def sdist():
 
 
 @task
-@needs('generate_setup', 'minilib', 'generate_library_main_header',
-       'generate_config_c_code', 'generate_config_python_code',
-       'generate_command_processor_header', 'generate_rpc_buffer_header',
-       'generate_python_code')
+@needs('generate_library_main_header', 'generate_config_c_code',
+       'generate_config_python_code', 'generate_command_processor_header',
+       'generate_rpc_buffer_header', 'generate_python_code')
 @cmdopts(LIB_CMDOPTS, share_with=LIB_GENERATE_TASKS)
 def generate_all_code(options):
     '''
@@ -374,3 +371,22 @@ def generate_all_code(options):
     device sketch.
     '''
     pass
+
+
+@task
+@cmdopts(LIB_CMDOPTS, share_with=LIB_GENERATE_TASKS)
+def generate_library_main_header(options):
+    package_name = options.PROPERTIES['package_name']
+    module_name = package_name.replace('-', '_')
+
+    library_dir = verify_library_directory(options)
+    library_header = library_dir.joinpath('src', '%s.h' % library_dir.name)
+    if not library_header.isdir():
+        library_header.parent.makedirs_p()
+    with library_header.open('wb') as output:
+        output.write('''
+#ifndef ___%{module_name_upper}s__H___
+#define ___%{module_name_upper}s__H___
+
+#endif  // #ifndef ___%{module_name_upper}s__H___
+    '''.strip().format(module_name_upper=module_name.upper()))

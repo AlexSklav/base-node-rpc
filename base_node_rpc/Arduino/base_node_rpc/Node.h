@@ -2,6 +2,7 @@
 #define ___NODE__H___
 
 #include <CArrayDefs.h>
+#include <BaseNodeRpc/BaseNode.h>
 #include <BaseNodeRpc/BaseNodeEeprom.h>
 #include <BaseNodeRpc/BaseNodeI2c.h>
 #include <BaseNodeRpc/BaseNodeSpi.h>
