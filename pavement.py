@@ -53,7 +53,7 @@ options(
                author_email='christian@fobel.net',
                url=URL,
                license='GPLv2',
-               install_requires=['arduino_scons>=0.1.post8',
+               install_requires=['arduino_scons>=0.1.post10',
                                  'arduino-rpc>=1.7.post9', 'protobuf>=2.6.1'],
                # Install data listed in `MANIFEST.in`
                include_package_data=True,
