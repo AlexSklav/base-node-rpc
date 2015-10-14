@@ -54,8 +54,7 @@ options(
                url=URL,
                license='GPLv2',
                install_requires=['arduino_scons>=0.1.post8',
-                                 'arduino-rpc>=1.7.post4',
-                                 'protobuf>=2.6.1'],
+                                 'arduino-rpc>=1.7.post8', 'protobuf>=2.6.1'],
                # Install data listed in `MANIFEST.in`
                include_package_data=True,
                packages=[str(PROJECT_PREFIX)]))
@@ -113,3 +112,24 @@ def generate_all_code(options):
 def sdist():
     """Overrides sdist to make sure that our setup.py is generated."""
     pass
+
+
+@task
+@needs('setuptools.command.install')
+def install(options):
+    """Override install to copy Arduino library to sketch library directory."""
+    install_arduino_library(options)
+
+
+@task
+@needs('setuptools.command.develop')
+def develop(options):
+    """Override develop to copy Arduino library to sketch library directory."""
+    install_arduino_library(options)
+
+
+@task
+@needs('wheel.bdist_wheel')
+def bdist_wheel(options):
+    """Override develop to copy Arduino library to sketch library directory."""
+    install_arduino_library(options)
