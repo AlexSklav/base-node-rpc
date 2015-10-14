@@ -14,7 +14,8 @@ except ImportError:
 
 
 DEFAULT_BASE_CLASSES = ['BaseNodeSerialHandler', 'BaseNodeEeprom',
-                        'BaseNodeI2c', 'BaseNodeI2cHandler<Handler>']
+                        'BaseNodeI2c', 'BaseNodeI2cHandler<Handler>',
+                        'BaseNodeSpi']
 DEFAULT_METHODS_FILTER = lambda df: df[~(df.method_name
                                          .isin(['get_config_fields',
                                                 'get_state_fields']))].copy()
