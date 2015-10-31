@@ -241,10 +241,10 @@ def generate_config_c_code(options):
     from arduino_rpc.code_gen import C_GENERATED_WARNING_MESSAGE
 
     sketch_dir = options.rpc_module.get_sketch_directory()
-    proto_path = sketch_dir.joinpath('config.proto').abspath()
-    options_path = sketch_dir.joinpath('config.options').abspath()
-
-    if proto_path.isfile():
+    for proto_path in sketch_dir.abspath().files('*.proto'):
+        proto_name = proto_path.namebase
+        options_path = proto_path.parent.joinpath(proto_name +
+                                                  '.options')
         if options_path.isfile():
             kwargs = {'options_file': options_path}
         else:
@@ -257,18 +257,18 @@ def generate_config_c_code(options):
             arduino_src_dir.makedirs_p()
 
         nano_pb_code = npb.compile_nanopb(proto_path, **kwargs)
-        c_output_base = arduino_src_dir.joinpath('config_pb')
+        c_output_base = arduino_src_dir.joinpath(proto_name + '_pb')
         c_header_path = c_output_base + '.h'
         with open(c_output_base + '.c', 'wb') as output:
             print >> output, C_GENERATED_WARNING_MESSAGE % datetime.now()
             output.write(nano_pb_code['source'].replace('{{ header_path }}',
-                         c_header_path.name))
+                        c_header_path.name))
         with open(c_header_path, 'wb') as output:
             print >> output, C_GENERATED_WARNING_MESSAGE % datetime.now()
             output.write(nano_pb_code['header']
-                         .replace('PB_CONFIG_PB_H_INCLUDED',
-                                  'PB__%s__CONFIG_PB_H_INCLUDED' %
-                                  name.upper()))
+                        .replace('PB_%s_PB_H_INCLUDED' % proto_name.upper(),
+                                 'PB__%s__%s_PB_H_INCLUDED' %
+                                (name.upper(), proto_name.upper())))
 
 
 @task
@@ -278,11 +278,11 @@ def generate_config_python_code(options):
     from path_helpers import path
 
     sketch_dir = options.rpc_module.get_sketch_directory()
-    proto_path = sketch_dir.joinpath('config.proto').abspath()
-
-    if proto_path.isfile():
+    for proto_path in sketch_dir.abspath().files('*.proto'):
+        proto_name = proto_path.namebase
         pb_code = npb.compile_pb(proto_path)
-        output_path = path(options.PROPERTIES['package_name'].replace('-', '_')).joinpath('config.py')
+        output_path = path(options.PROPERTIES['package_name']
+                           .replace('-', '_')).joinpath(proto_name + '.py')
         output_path.write_bytes(pb_code['python'])
 
 
@@ -386,8 +386,8 @@ def generate_library_main_header(options):
         library_header.parent.makedirs_p()
     with library_header.open('wb') as output:
         output.write('''
-#ifndef ___%{module_name_upper}s__H___
-#define ___%{module_name_upper}s__H___
+#ifndef ___{module_name_upper}__H___
+#define ___{module_name_upper}__H___
 
-#endif  // #ifndef ___%{module_name_upper}s__H___
+#endif  // #ifndef ___{module_name_upper}__H___
     '''.strip().format(module_name_upper=module_name.upper()))
