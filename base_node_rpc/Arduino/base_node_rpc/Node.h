@@ -23,7 +23,7 @@ class Node :
 public:
   uint8_t buffer_[128];
   Node() : BaseNode() {}
-  UInt8Array get_buffer() { return UInt8Array(sizeof(buffer_), buffer_); }
+  UInt8Array get_buffer() { return UInt8Array_init(sizeof(buffer_), buffer_); }
   void begin() {
 #if !defined(DISABLE_SERIAL)
     Serial.begin(115200);
