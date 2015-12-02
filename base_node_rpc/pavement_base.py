@@ -250,7 +250,8 @@ def generate_config_c_code(options):
         else:
             kwargs = {}
 
-        name = options.PROPERTIES['package_name']
+        package_name = options.PROPERTIES['package_name']
+        module_name = package_name.replace('-', '_')
         project_lib_dir = verify_library_directory(options)
         arduino_src_dir = project_lib_dir.joinpath('src', project_lib_dir.name)
         if not arduino_src_dir.isdir():
@@ -262,13 +263,13 @@ def generate_config_c_code(options):
         with open(c_output_base + '.c', 'wb') as output:
             print >> output, C_GENERATED_WARNING_MESSAGE % datetime.now()
             output.write(nano_pb_code['source'].replace('{{ header_path }}',
-                        c_header_path.name))
+                                                        c_header_path.name))
         with open(c_header_path, 'wb') as output:
             print >> output, C_GENERATED_WARNING_MESSAGE % datetime.now()
             output.write(nano_pb_code['header']
-                        .replace('PB_%s_PB_H_INCLUDED' % proto_name.upper(),
-                                 'PB__%s__%s_PB_H_INCLUDED' %
-                                (name.upper(), proto_name.upper())))
+                         .replace('PB_%s_PB_H_INCLUDED' % proto_name.upper(),
+                                  'PB__%s__%s_PB_H_INCLUDED' %
+                                  (module_name.upper(), proto_name.upper())))
 
 
 @task
