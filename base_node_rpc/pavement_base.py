@@ -19,6 +19,7 @@ DEFAULT_BASE_CLASSES = ['BaseNodeSerialHandler', 'BaseNodeEeprom',
 DEFAULT_METHODS_FILTER = lambda df: df[~(df.method_name
                                          .isin(['get_config_fields',
                                                 'get_state_fields']))].copy()
+DEFAULT_POINTER_BITWIDTH = 16
 prefix = 'base_node_rpc.pavement_base.'
 
 
@@ -181,18 +182,21 @@ def generate_command_processor_header(options):
                'CommandProcessor': get_c_command_processor_header_code}
 
     methods_filter = getattr(options, 'methods_filter', DEFAULT_METHODS_FILTER)
+    pointer_width = getattr(options, 'pointer_width', DEFAULT_POINTER_BITWIDTH)
 
     for k, f in headers.iteritems():
         output_header = arduino_src_dir.joinpath('%s.h' % k)
         # Prepend auto-generated warning to generated source code.
         f_get_code = lambda *args_: ((C_GENERATED_WARNING_MESSAGE %
-                                      datetime.now()) + f(*(args_ +
-                                                            (module_name, ))))
+                                      datetime.now()) +
+                                     f(*(args_ + (module_name, )),
+                                       pointer_width=pointer_width))
 
         write_code(input_headers, input_classes, output_header, f_get_code,
                    *['-I%s' % p for p in [lib_dir.abspath()] +
                      c_array_defs.get_includes()],
-                   methods_filter=methods_filter)
+                   methods_filter=methods_filter,
+                   pointer_width=pointer_width)
 
 
 @task
@@ -227,11 +231,15 @@ class SerialProxy(SerialProxyMixin, Proxy):
                                     datetime.now()) +
                                    get_python_code(*args,
                                                    extra_header=extra_header,
-                                                   extra_footer=extra_footer))
+                                                   extra_footer=extra_footer,
+                                                   pointer_width=
+                                                   pointer_width))
     methods_filter = getattr(options, 'methods_filter', DEFAULT_METHODS_FILTER)
+    pointer_width = getattr(options, 'pointer_width', DEFAULT_POINTER_BITWIDTH)
     write_code(input_headers, input_classes, output_file, f_python_code,
                *['-I%s' % p for p in [lib_dir.abspath()] +
-                 c_array_defs.get_includes()], methods_filter=methods_filter)
+                 c_array_defs.get_includes()], methods_filter=methods_filter,
+               pointer_width=pointer_width)
 
 
 @task
