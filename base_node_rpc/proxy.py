@@ -200,7 +200,7 @@ class SerialProxyMixin(object):
                 try:
                     self.ram_free()
                 except IOError:
-                    if i >= retry_count - 1: raise
+                    if i >= retry_count - 1: break
                     self.terminate()
                     continue
                 try:
