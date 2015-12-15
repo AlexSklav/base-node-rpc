@@ -2,14 +2,17 @@ import time
 import datetime
 import sys
 from collections import OrderedDict
+import logging
 
 from nadamq.NadaMq import cPacket, PACKET_TYPES
 from .queue import SerialStream, PacketWatcher
 
+logger = logging.getLogger(__name__)
+
 
 class ProxyBase(object):
-    host_package_name = None    
-    
+    host_package_name = None
+
     def __init__(self, stream, buffer_bounds_check=True, high_water_mark=10,
                  auto_close_stream=False):
         self._buffer_bounds_check = buffer_bounds_check
@@ -200,19 +203,31 @@ class SerialProxyMixin(object):
                 try:
                     self.ram_free()
                 except IOError:
+                    logger.debug('Connection unsuccessful on port %s after %d '
+                                 'attempts.', port, i + 1)
                     if i >= retry_count - 1: break
                     self.terminate()
                     continue
                 try:
+                    device_package_name = self.properties['package_name']
                     if (self.host_package_name
-                        is None) or (self.properties['package_name'] ==
+                        is None) or (device_package_name ==
                                      self.host_package_name):
+                        logger.info('Successfully connected to %s on port %s',
+                                    device_package_name, port)
                         return
                     else: # not the device we're looking for
+                        logger.debug('Package name of device (%s) on port (%s)'
+                                     ' does not match package name (%s)',
+                                     device_package_name, port,
+                                     self.host_package_name)
                         self.terminate()
                         break
-                except: # free the serial port if there was an exception
+                except:
+                    # There was an exception, so free the serial port.
+                    logger.debug('Exception occurred while querying '
+                                 'properties on port %s.', port, exc_info=True)
                     self.terminate()
                     raise
-                    
+
         raise IOError('Device not found on any port.')
