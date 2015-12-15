@@ -48,13 +48,13 @@ options(
     DEFAULT_ARDUINO_BOARDS=DEFAULT_ARDUINO_BOARDS,
     setup=dict(name=package_name,
                version=VERSION,
-               description='Arduino RPC node packaged as Python package.',
+               description=LIB_PROPERTIES['long_description'],
                author='Christian Fobel',
                author_email='christian@fobel.net',
                url=URL,
                license='GPLv2',
                install_requires=['arduino_scons>=0.1.post10',
-                                 'arduino-rpc>=1.7.post15', 'protobuf>=2.6.1'],
+                                 'arduino-rpc>=1.7.post17', 'protobuf>=2.6.1'],
                # Install data listed in `MANIFEST.in`
                include_package_data=True,
                packages=[str(PROJECT_PREFIX)]))
