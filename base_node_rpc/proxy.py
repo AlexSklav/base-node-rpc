@@ -64,7 +64,7 @@ class ProxyBase(object):
         '''
         import webbrowser
 
-        url = self.properties().get('url')
+        url = self.properties.url
         if url:
             webbrowser.open_new_tab(url)
 
