@@ -4,6 +4,7 @@ import sys
 from collections import OrderedDict
 import logging
 
+from arduino_rpc.protobuf import resolve_field_values
 import serial
 from nadamq.NadaMq import cPacket, PACKET_TYPES
 from .queue import SerialStream, PacketWatcher
@@ -235,3 +236,97 @@ class SerialProxyMixin(object):
                     raise
 
         raise IOError('Device not found on any port.')
+
+
+class ConfigMixinBase(object):
+    '''
+    Mixin class to add convenience wrappers around config getter/setter.
+
+    **N.B.,** Sub-classes *MUST* implement the `config_class` method to return
+    the `Config` class type for the proxy.
+    '''
+    @property
+    def config_class(self):
+        raise NotImplementedError('Sub-classes must implement this method to '
+                                  'return the `Config` class type for the '
+                                  'proxy.')
+
+    @property
+    def _config_pb(self):
+        return self.config_class.FromString(self.serialize_config().tostring())
+
+    @property
+    def config(self):
+        return (resolve_field_values(self._config_pb,
+                                     set_default=True)
+                .set_index(['full_name'])['value'])
+
+    @config.setter
+    def config(self, value):
+        # convert pandas Series to a dictionary if necessary
+        if hasattr(value, 'to_dict'):
+            value = value.to_dict()
+
+        self.update_config(**value)
+
+    def update_config(self, **kwargs):
+        '''
+        Update fields in the config object based on keyword arguments.
+
+        By default, these values will be saved to EEPROM. To prevent this
+        (e.g., to verify system behavior before committing the changes), you
+        can pass the special keyword argument 'save=False'. In this case, you
+        will need to call the method save_config() to make your changes
+        persistent.
+        '''
+        save = True
+        if 'save' in kwargs.keys() and not kwargs.pop('save'):
+            save = False
+
+        # convert dictionary to a protobuf
+        config_pb = self.config_class(**kwargs)
+
+        return_code = super(ConfigMixinBase, self).update_config(config_pb)
+
+        if save:
+            super(ConfigMixinBase, self).save_config()
+
+        return return_code
+
+
+class StateMixinBase(object):
+    '''
+    Mixin class to add convenience wrappers around state getter/setter.
+
+    **N.B.,** Sub-classes *MUST* implement the `state_class` method to return
+    the `State` class type for the proxy.
+    '''
+    @property
+    def state_class(self):
+        raise NotImplementedError('Sub-classes must implement this method to '
+                                  'return the `State` class type for the '
+                                  'proxy.')
+
+    @property
+    def _state_pb(self):
+        return self.state_class.FromString(self.serialize_state().tostring())
+
+    @property
+    def state(self):
+        return (resolve_field_values(self._state_pb,
+                                     set_default=True)
+                .set_index(['full_name'])['value'])
+
+    @state.setter
+    def state(self, value):
+        # convert pandas Series to a dictionary if necessary
+        if hasattr(value, 'to_dict'):
+            value = value.to_dict()
+
+        self.update_state(**value)
+
+    def update_state(self, **kwargs):
+        state = self.state_class(**kwargs)
+        return super(StateMixinBase, self).update_state(state)
+
+
