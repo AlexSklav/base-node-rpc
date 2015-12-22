@@ -4,6 +4,7 @@ import sys
 from collections import OrderedDict
 import logging
 
+import serial
 from nadamq.NadaMq import cPacket, PACKET_TYPES
 from .queue import SerialStream, PacketWatcher
 
@@ -25,11 +26,11 @@ class ProxyBase(object):
 
     def reset(self):
         self._reset_packet_watcher(self.stream, self.high_water_mark)
-    
+
     @property
     def stream(self):
         return self._stream
-    
+
     @stream.setter
     def stream(self, stream):
         self._stream = stream
@@ -160,7 +161,7 @@ class SerialProxyMixin(object):
     def __init__(self, **kwargs):
         '''
         Attempt to auto-connect to a proxy.
-    
+
         If `name` is specified, only connect to proxy matching name.
         If `verify` callback is specified, only connect to proxy where `verify`
         returns `True`.
@@ -169,9 +170,9 @@ class SerialProxyMixin(object):
         # libraries directly.
         from serial import Serial
         from serial_device import get_serial_ports
-    
+
         baudrate = kwargs.pop('baudrate', 115200)
-        retry_count = kwargs.pop('retry_count', 6)        
+        retry_count = kwargs.pop('retry_count', 6)
         port = kwargs.pop('port', None)
         auto_close_stream = kwargs.pop('auto_close_stream', True)
         if not auto_close_stream:
@@ -186,9 +187,12 @@ class SerialProxyMixin(object):
         first_port = True
         for port in ports:
             for i in xrange(retry_count):
-                serial_device = Serial(port, baudrate=baudrate)
+                try:
+                    serial_device = Serial(port, baudrate=baudrate)
+                except serial.SerialException:
+                    continue
                 stream = SerialStream(serial_device)
-                
+
                 if first_port:
                     super(SerialProxyMixin, self).__init__(stream,
                                                            auto_close_stream=
@@ -197,7 +201,7 @@ class SerialProxyMixin(object):
                     first_port = False
                 else:
                     self.stream = stream
-                    
+
                 time.sleep(.5 * i)
 
                 try:
