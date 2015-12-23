@@ -19,10 +19,12 @@ VERSION = version.getVersion()
 URL='http://github.com/wheeler-microfluidics/%s.git' % PROJECT_PREFIX
 package_name = PROJECT_PREFIX.replace('_', '-')
 PROPERTIES = OrderedDict([('package_name', package_name),
-                          ('base_node_version', VERSION),
+                          ('display_name', package_name),
+                          ('base_node_software_version', VERSION),
                           ('manufacturer', 'Wheeler Lab'),
                           ('software_version', VERSION),
                           ('url', URL)])
+
 LIB_PROPERTIES = PROPERTIES.copy()
 LIB_PROPERTIES.update(OrderedDict([('author', 'Christian Fobel'),
                                    ('author_email', 'christian@fobel.net'),
