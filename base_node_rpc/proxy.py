@@ -306,6 +306,24 @@ class ConfigMixinBase(object):
 
         return return_code
     
+    def reset_config(self, **kwargs):
+        '''
+        Reset fields in the config object to their default values.
+
+        By default, these values will be saved to EEPROM. To prevent this
+        (e.g., to verify system behavior before committing the changes), you
+        can pass the special keyword argument 'save=False'. In this case, you
+        will need to call the method save_config() to make your changes
+        persistent.
+        '''
+        save = True
+        if 'save' in kwargs.keys() and not kwargs.pop('save'):
+            save = False
+
+        super(ConfigMixinBase, self).reset_config()
+        if save:
+            super(ConfigMixinBase, self).save_config()
+
 
 class StateMixinBase(object):
     '''
