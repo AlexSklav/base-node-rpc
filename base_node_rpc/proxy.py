@@ -3,6 +3,7 @@ import datetime
 import sys
 from collections import OrderedDict
 import logging
+import pkg_resources
 
 from arduino_rpc.protobuf import resolve_field_values
 import serial
@@ -24,6 +25,18 @@ class ProxyBase(object):
         self._auto_close_stream = True
         self._stream = stream
         self._reset_packet_watcher(stream, high_water_mark)
+
+    @property
+    def host_software_version(self):
+        return pkg_resources.parse_version(
+             pkg_resources.get_distribution(
+                 self.properties['package_name']
+             ).version
+         )
+
+    @property
+    def remote_software_version(self):
+        return pkg_resources.parse_version(self.properties.software_version)
 
     def reset(self):
         self._reset_packet_watcher(self.stream, self.high_water_mark)
@@ -236,7 +249,7 @@ class SerialProxyMixin(object):
                     raise
 
         raise IOError('Device not found on any port.')
-
+    
 
 class ConfigMixinBase(object):
     '''
@@ -292,7 +305,7 @@ class ConfigMixinBase(object):
             super(ConfigMixinBase, self).save_config()
 
         return return_code
-
+    
 
 class StateMixinBase(object):
     '''
@@ -328,5 +341,3 @@ class StateMixinBase(object):
     def update_state(self, **kwargs):
         state = self.state_class(**kwargs)
         return super(StateMixinBase, self).update_state(state)
-
-
