@@ -5,7 +5,7 @@ from collections import OrderedDict
 import logging
 import pkg_resources
 
-from arduino_rpc.protobuf import resolve_field_values
+from arduino_rpc.protobuf import resolve_field_values, PYTYPE_MAP
 import serial
 from nadamq.NadaMq import cPacket, PACKET_TYPES
 from .queue import SerialStream, PacketWatcher
@@ -270,9 +270,10 @@ class ConfigMixinBase(object):
 
     @property
     def config(self):
-        return (resolve_field_values(self._config_pb,
-                                     set_default=True)
-                .set_index(['full_name'])['value'])
+        fv = resolve_field_values(self._config_pb,
+                                  set_default=True).set_index(['full_name'])
+        return OrderedDict([(k, PYTYPE_MAP[v.field_desc.type](v.value))
+                            for k, v in fv.iterrows()])
 
     @config.setter
     def config(self, value):
@@ -344,9 +345,10 @@ class StateMixinBase(object):
 
     @property
     def state(self):
-        return (resolve_field_values(self._state_pb,
-                                     set_default=True)
-                .set_index(['full_name'])['value'])
+        fv = resolve_field_values(self._state_pb,
+                                  set_default=True).set_index(['full_name'])
+        return OrderedDict([(k, PYTYPE_MAP[v.field_desc.type](v.value))
+                            for k, v in fv.iterrows()])
 
     @state.setter
     def state(self, value):
