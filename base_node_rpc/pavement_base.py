@@ -55,6 +55,15 @@ def generate_validate_header(py_proto_module_name, sketch_dir):
 
     For example, if the message name is `Config`, callbacks of the form
     `on_config_<field name>_changed` will be matched.
+
+    The following callback signatures are supported:
+
+        bool on_config_<field name>_changed()
+        bool on_config_<field name>_changed(new_value)
+        bool on_config_<field name>_changed(current_value, new_value)
+
+    The corresponding field in Protocol Buffer message will be set to the new
+    value *only* if the callback returns `true`.
     '''
     from importlib import import_module
 
@@ -253,6 +262,11 @@ class SerialProxy(SerialProxyMixin, Proxy):
 @task
 @cmdopts(LIB_CMDOPTS, share_with=LIB_GENERATE_TASKS)
 def generate_protobuf_c_code(options):
+    '''
+    For each Protocol Buffer definition (i.e., `*.proto`) in the sketch
+    directory, use the nano protocol buffer compiler to generate C code for the
+    corresponding protobuf message structure(s).
+    '''
     import nanopb_helpers as npb
     from arduino_rpc.code_gen import C_GENERATED_WARNING_MESSAGE
 
@@ -398,6 +412,10 @@ def generate_all_code(options):
 @task
 @cmdopts(LIB_CMDOPTS, share_with=LIB_GENERATE_TASKS)
 def generate_library_main_header(options):
+    '''
+    Generate an (empty) header file which may be included in the Arduino sketch
+    to trigger inclusion of the rest of the library.
+    '''
     package_name = options.PROPERTIES['package_name']
     module_name = package_name.replace('-', '_')
 
