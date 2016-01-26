@@ -49,9 +49,9 @@ def get_base_classes_and_headers(options, lib_dir, sketch_dir):
 
 def generate_validate_header(message_name, sketch_dir):
     '''
-    If package has generated Python `config` module and a Protocol Buffer
-    message class type with the specified message name is defined, scan node
-    base classes for callback methods related to the message type.
+    If package has a Protocol Buffer message class type with the specified
+    message name defined, scan node base classes for callback methods related to
+    the message type.
 
     For example, if the message name is `Config`, callbacks of the form
     `on_config_<field name>_changed` will be matched.
@@ -64,22 +64,26 @@ def generate_validate_header(message_name, sketch_dir):
                            write_handler_validator_header)
     from . import get_lib_directory
 
+    mod_name = message_name.lower()
+
     try:
-        config = import_module('.config', package=options.rpc_module.__name__)
+        mod = import_module('.' + mod_name, package=options.rpc_module.__name__)
     except ImportError:
-        warnings.warn('ImportError: could not import %s.config' %
-                      options.rpc_module.__name__)
+        warnings.warn('ImportError: could not import %s.%s' %
+                      options.rpc_module.__name__, mod_name)
         return
 
     lib_dir = get_lib_directory()
-    if hasattr(config, message_name):
+    if hasattr(mod, message_name):
         package_name = sketch_dir.name
         input_classes, input_headers = get_base_classes_and_headers(options,
                                                                     lib_dir,
                                                                     sketch_dir)
-        message_type = getattr(config, message_name)
+
+        message_type = getattr(mod, message_name)
         args = ['-I%s' % p for p in [lib_dir.abspath()] +
                 c_array_defs.get_includes()]
+
         validator_code = get_handler_validator_class_code(input_headers,
                                                           input_classes,
                                                           message_type, *args)
