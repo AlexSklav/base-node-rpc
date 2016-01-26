@@ -47,48 +47,65 @@ def get_base_classes_and_headers(options, lib_dir, sketch_dir):
     return input_classes, input_headers
 
 
-def generate_validate_header(message_name, sketch_dir):
+def generate_validate_header(py_proto_module_name, sketch_dir):
     '''
-    If package has generated Python `config` module and a Protocol Buffer
-    message class type with the specified message name is defined, scan node
-    base classes for callback methods related to the message type.
+    If package has a Protocol Buffer message class type with the specified
+    message name defined, scan node base classes for callback methods related to
+    the message type.
 
     For example, if the message name is `Config`, callbacks of the form
     `on_config_<field name>_changed` will be matched.
+
+    The following callback signatures are supported:
+
+        bool on_config_<field name>_changed()
+        bool on_config_<field name>_changed(new_value)
+        bool on_config_<field name>_changed(current_value, new_value)
+
+    The corresponding field in Protocol Buffer message will be set to the new
+    value *only* if the callback returns `true`.
     '''
     from importlib import import_module
 
+    from clang_helpers.data_frame import underscore_to_camelcase
     from path_helpers import path
     import c_array_defs
     from .protobuf import (get_handler_validator_class_code,
                            write_handler_validator_header)
     from . import get_lib_directory
 
+    c_protobuf_struct_name = underscore_to_camelcase(py_proto_module_name)
+
     try:
-        config = import_module('.config', package=options.rpc_module.__name__)
+        mod = import_module('.' + py_proto_module_name,
+                            package=options.rpc_module.__name__)
     except ImportError:
-        warnings.warn('ImportError: could not import %s.config' %
-                      options.rpc_module.__name__)
+        warnings.warn('ImportError: could not import %s.%s' %
+                      options.rpc_module.__name__, mod_name)
         return
 
     lib_dir = get_lib_directory()
-    if hasattr(config, message_name):
+    if hasattr(mod, c_protobuf_struct_name):
         package_name = sketch_dir.name
         input_classes, input_headers = get_base_classes_and_headers(options,
                                                                     lib_dir,
                                                                     sketch_dir)
-        message_type = getattr(config, message_name)
+
+        message_type = getattr(mod, c_protobuf_struct_name)
         args = ['-I%s' % p for p in [lib_dir.abspath()] +
                 c_array_defs.get_includes()]
+
         validator_code = get_handler_validator_class_code(input_headers,
                                                           input_classes,
                                                           message_type, *args)
 
         output_path = path(sketch_dir).joinpath('%s_%s_validate.h' %
                                                 (package_name,
-                                                 message_name.lower()))
+                                                 c_protobuf_struct_name
+                                                 .lower()))
         write_handler_validator_header(output_path, package_name,
-                                       message_name.lower(), validator_code)
+                                       c_protobuf_struct_name.lower(),
+                                       validator_code)
 
 
 @task
@@ -244,7 +261,12 @@ class SerialProxy(SerialProxyMixin, Proxy):
 
 @task
 @cmdopts(LIB_CMDOPTS, share_with=LIB_GENERATE_TASKS)
-def generate_config_c_code(options):
+def generate_protobuf_c_code(options):
+    '''
+    For each Protocol Buffer definition (i.e., `*.proto`) in the sketch
+    directory, use the nano protocol buffer compiler to generate C code for the
+    corresponding protobuf message structure(s).
+    '''
     import nanopb_helpers as npb
     from arduino_rpc.code_gen import C_GENERATED_WARNING_MESSAGE
 
@@ -282,7 +304,7 @@ def generate_config_c_code(options):
 
 @task
 @cmdopts(LIB_CMDOPTS, share_with=LIB_GENERATE_TASKS)
-def generate_config_python_code(options):
+def generate_protobuf_python_code(options):
     import nanopb_helpers as npb
     from path_helpers import path
 
@@ -296,19 +318,22 @@ def generate_config_python_code(options):
 
 
 @task
-@needs('generate_config_python_code')
+@needs('generate_protobuf_python_code')
 @cmdopts(LIB_CMDOPTS, share_with=LIB_GENERATE_TASKS)
-def generate_config_validate_header(options):
-    sketch_dir = options.rpc_module.get_sketch_directory()
-    generate_validate_header('Config', sketch_dir)
+def generate_validate_headers(options):
+    '''
+    For each Protocol Buffer definition (i.e., `*.proto`) in the sketch
+    directory, generate code to call corresponding validation methods (if any)
+    present on the `Node` class.
 
-
-@task
-@needs('generate_config_python_code')
-@cmdopts(LIB_CMDOPTS, share_with=LIB_GENERATE_TASKS)
-def generate_state_validate_header():
+    See `generate_validate_header` for more information.
+    '''
     sketch_dir = options.rpc_module.get_sketch_directory()
-    generate_validate_header('State', sketch_dir)
+    for proto_path in sketch_dir.abspath().files('*.proto'):
+        proto_name = proto_path.namebase
+        print ('[generate_validate_headers] Generate validation header for %s'
+               % proto_name)
+        generate_validate_header(proto_name, sketch_dir)
 
 
 @task
@@ -371,9 +396,10 @@ def sdist():
 
 
 @task
-@needs('generate_library_main_header', 'generate_config_c_code',
-       'generate_config_python_code', 'generate_command_processor_header',
-       'generate_rpc_buffer_header', 'generate_python_code')
+@needs('generate_library_main_header', 'generate_protobuf_c_code',
+       'generate_protobuf_python_code', 'generate_validate_headers',
+       'generate_command_processor_header', 'generate_rpc_buffer_header',
+       'generate_python_code')
 @cmdopts(LIB_CMDOPTS, share_with=LIB_GENERATE_TASKS)
 def generate_all_code(options):
     '''
@@ -386,6 +412,10 @@ def generate_all_code(options):
 @task
 @cmdopts(LIB_CMDOPTS, share_with=LIB_GENERATE_TASKS)
 def generate_library_main_header(options):
+    '''
+    Generate an (empty) header file which may be included in the Arduino sketch
+    to trigger inclusion of the rest of the library.
+    '''
     package_name = options.PROPERTIES['package_name']
     module_name = package_name.replace('-', '_')
 
