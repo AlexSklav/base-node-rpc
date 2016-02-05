@@ -51,7 +51,7 @@ public:
   }
 
   bool on_config_i2c_address_changed(uint32_t new_value) {
-    // I2C addresses must be in the range 10-120, according to the
+    // I2C addresses must be in the range 8-119, according to the
     // specification.
     if ((new_value > 0x07) && (new_value < 0x78)) {
 #ifdef __AVR__
