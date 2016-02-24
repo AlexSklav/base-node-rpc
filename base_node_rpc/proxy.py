@@ -90,7 +90,7 @@ class ProxyBase(object):
                                                 'package_name', 'display_name',
                                                 'manufacturer', 'url',
                                                 'software_version']
-                                      if hasattr(self, k)]))
+                                      if hasattr(self, k)]), dtype=object)
 
     @property
     def buffer_size(self):
@@ -270,10 +270,12 @@ class ConfigMixinBase(object):
 
     @property
     def config(self):
+        import pandas as pd
+
         fv = resolve_field_values(self._config_pb,
                                   set_default=True).set_index(['full_name'])
-        return OrderedDict([(k, PYTYPE_MAP[v.field_desc.type](v.value))
-                            for k, v in fv.iterrows()])
+        return pd.Series(OrderedDict([(k, PYTYPE_MAP[v.field_desc.type](v.value))
+                                      for k, v in fv.iterrows()]), dtype=object)
 
     @config.setter
     def config(self, value):
@@ -345,10 +347,12 @@ class StateMixinBase(object):
 
     @property
     def state(self):
+        import pandas as pd
+
         fv = resolve_field_values(self._state_pb,
                                   set_default=True).set_index(['full_name'])
-        return OrderedDict([(k, PYTYPE_MAP[v.field_desc.type](v.value))
-                            for k, v in fv.iterrows()])
+        return pd.Series(OrderedDict([(k, PYTYPE_MAP[v.field_desc.type](v.value))
+                                      for k, v in fv.iterrows()]), dtype=object)
 
     @state.setter
     def state(self, value):
