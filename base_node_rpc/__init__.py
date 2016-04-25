@@ -1,3 +1,4 @@
+import os
 from collections import OrderedDict
 
 try:
@@ -11,7 +12,7 @@ except (ImportError, TypeError):
 def package_path():
     from path_helpers import path
 
-    return path(__file__).parent
+    return path(os.path.dirname(__file__))
 
 
 def get_sketch_directory():

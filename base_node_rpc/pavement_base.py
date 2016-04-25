@@ -383,8 +383,12 @@ def build_firmware():
     if not boards:
         boards = options.DEFAULT_ARDUINO_BOARDS
     for board in boards:
+        if '.' in board:
+            args = 'ARDUINO_BOARD="%s" MCU="%s"' % tuple(board.split('.'))
+        else:
+            args = 'ARDUINO_BOARD="%s"' % board
         # Compile firmware once for each specified board.
-        sh('scons %s ARDUINO_BOARD="%s"' % (scons_flags, board))
+        sh('scons %s %s' % (scons_flags, args))
 
 
 @task

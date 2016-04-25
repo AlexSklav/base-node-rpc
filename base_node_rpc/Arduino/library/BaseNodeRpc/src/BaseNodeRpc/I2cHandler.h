@@ -3,8 +3,20 @@
 
 #include <NadaMQ.h>
 #include <Wire.h>
+#include <PacketParser.h>
 #include "BaseHandler.h"
 
+#ifndef TWAR
+#define TWAR  I2C0_A1
+#endif
+
+#ifndef I2C_ADDRESS_REGISTER
+#ifdef TWAR
+#define I2C_ADDRESS_REGISTER  TWAR
+#else
+#define I2C_ADDRESS_REGISTER  I2C0_A1
+#endif
+#endif
 
 namespace base_node_rpc {
 
@@ -36,7 +48,7 @@ struct i2c_write_packet {
     to_send.compute_crc();
 
     stream_byte_type startflag[] = "|||";
-    const uint8_t source_addr = (TWAR & 0x0FE) >> 1;
+    const uint8_t source_addr = (I2C_ADDRESS_REGISTER & 0x0FE) >> 1;
 
     // Send the packet header.
     Wire.beginTransmission(address_);

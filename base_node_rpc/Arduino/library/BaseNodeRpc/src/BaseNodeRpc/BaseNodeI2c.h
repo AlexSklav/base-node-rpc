@@ -7,6 +7,17 @@
 #include "BaseBuffer.h"
 
 #define BROADCAST_ADDRESS 0x00
+#ifndef TWI_BUFFER_LENGTH
+#define TWI_BUFFER_LENGTH BUFFER_LENGTH
+#endif
+
+#ifndef I2C_ADDRESS_REGISTER
+#ifdef TWAR
+#define I2C_ADDRESS_REGISTER  TWAR
+#else
+#define I2C_ADDRESS_REGISTER  I2C0_A1
+#endif
+#endif
 
 
 /* Callback functions for slave device. */
@@ -16,8 +27,9 @@ extern void i2c_request_event();
 
 class BaseNodeI2c : public BufferIFace {
 public:
+  void set_clock(uint32_t frequency) { Wire.setClock(frequency); }
   void set_i2c_address(uint8_t address) { Wire.begin(address); }
-  uint8_t i2c_address() { return (TWAR & 0x0FE) >> 1; }
+  uint8_t i2c_address() { return (I2C_ADDRESS_REGISTER & 0x0FE) >> 1; }
   uint16_t i2c_buffer_size() { return TWI_BUFFER_LENGTH; }
   UInt8Array i2c_scan() {
     UInt8Array output = get_buffer();
@@ -62,7 +74,7 @@ public:
     Wire.write(data.data, data.length);
     Wire.endTransmission();
   }
-  void i2c_enable_broadcast() { TWAR |= 0x01; }
-  void i2c_disable_broadcast() { TWAR &= ~0x01; }
+  void i2c_enable_broadcast() { I2C_ADDRESS_REGISTER |= 0x01; }
+  void i2c_disable_broadcast() { I2C_ADDRESS_REGISTER &= ~0x01; }
 };
 #endif  // #ifndef ___BASE_NODE_I2C__H___
