@@ -57,7 +57,8 @@ public:
       Wire.begin(static_cast<uint8_t>(new_value));
       return true;
     } else {
-      // Invalid i2c address was specified.
+      // Invalid i2c address was specified. Start in master-only mode.
+      Wire.begin();
       return false;
     }
   }
