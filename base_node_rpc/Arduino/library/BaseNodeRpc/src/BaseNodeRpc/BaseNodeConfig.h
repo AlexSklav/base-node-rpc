@@ -54,15 +54,14 @@ public:
     // I2C addresses must be in the range 8-119, according to the
     // specification.
     if ((new_value > 0x07) && (new_value < 0x78)) {
-#ifdef __AVR__
       Wire.begin(static_cast<uint8_t>(new_value));
-#endif  // #ifdef __AVR__
       return true;
     } else {
       // Invalid i2c address was specified.
       return false;
     }
   }
+
 };
 
 
