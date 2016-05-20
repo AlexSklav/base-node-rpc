@@ -84,13 +84,15 @@ class ProxyBase(object):
     @property
     def properties(self):
         import pandas as pd
-
-        return pd.Series(OrderedDict([(k, getattr(self, k)().tostring())
+        properties = OrderedDict([(k, getattr(self, k)().tostring())
                                       for k in ['base_node_software_version',
                                                 'package_name', 'display_name',
                                                 'manufacturer', 'url',
                                                 'software_version']
-                                      if hasattr(self, k)]), dtype=object)
+                                      if hasattr(self, k)])
+        for k in ['id', 'uuid']:
+            properties[k] = getattr(self, k)
+        return pd.Series(properties, dtype=object)
 
     @property
     def buffer_size(self):
