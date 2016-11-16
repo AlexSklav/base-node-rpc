@@ -387,6 +387,9 @@ def build_firmware():
             args = 'ARDUINO_BOARD="%s" MCU="%s"' % tuple(board.split('.'))
         else:
             args = 'ARDUINO_BOARD="%s"' % board
+        # Run scons -c as a workaround as a temporary workaround for this
+        # issue: https://github.com/wheeler-microfluidics/base-node-rpc/issues/4
+        sh('scons -c')
         # Compile firmware once for each specified board.
         sh('scons %s %s' % (scons_flags, args))
 
