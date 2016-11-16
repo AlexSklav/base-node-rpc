@@ -273,11 +273,14 @@ class ConfigMixinBase(object):
     @property
     def config(self):
         import pandas as pd
-
-        fv = resolve_field_values(self._config_pb,
-                                  set_default=True).set_index(['full_name'])
-        return pd.Series(OrderedDict([(k, PYTYPE_MAP[v.field_desc.type](v.value))
-                                      for k, v in fv.iterrows()]), dtype=object)
+        
+        try:
+            fv = resolve_field_values(self._config_pb,
+                                      set_default=True).set_index(['full_name'])
+            return pd.Series(OrderedDict([(k, PYTYPE_MAP[v.field_desc.type](v.value))
+                                          for k, v in fv.iterrows()]), dtype=object)
+        except ValueError:
+            return pd.Series()
 
     @config.setter
     def config(self, value):
@@ -351,10 +354,14 @@ class StateMixinBase(object):
     def state(self):
         import pandas as pd
 
-        fv = resolve_field_values(self._state_pb,
-                                  set_default=True).set_index(['full_name'])
-        return pd.Series(OrderedDict([(k, PYTYPE_MAP[v.field_desc.type](v.value))
-                                      for k, v in fv.iterrows()]), dtype=object)
+        try:
+            fv = resolve_field_values(self._state_pb,
+                                      set_default=True).set_index(['full_name'])
+            return pd.Series(OrderedDict([(k, PYTYPE_MAP[v.field_desc.type](v.value))
+                                          for k, v in fv.iterrows()]), dtype=object)
+        except ValueError:
+            return pd.Series()
+
 
     @state.setter
     def state(self, value):
