@@ -374,7 +374,7 @@ def init_config():
 @task
 @needs('generate_all_code')
 @cmdopts([('sconsflags=', 'f', 'Flags to pass to SCons.'),
-          ('boards=', 'b', 'Comma-separated list of board names to compile '
+          ('boards=', 'B', 'Comma-separated list of board names to compile '
            'for (e.g., `uno`).')])
 def build_firmware():
     scons_flags = getattr(options, 'sconsflags', '')
@@ -396,6 +396,13 @@ def build_firmware():
        'setuptools.command.sdist')
 def sdist():
     """Overrides sdist to make sure that our setup.py is generated."""
+    pass
+
+@task
+@needs('build_arduino_library', 'build_firmware', 'generate_setup', 'minilib',
+       'setuptools.command.bdist_wheel')
+def bdist_wheel():
+    """Overrides bdist_wheel to make sure that our setup.py is generated."""
     pass
 
 
