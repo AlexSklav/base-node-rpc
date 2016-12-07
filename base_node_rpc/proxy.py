@@ -1,13 +1,15 @@
-import time
-import datetime
-import sys
 from collections import OrderedDict
+import datetime
 import logging
 import pkg_resources
+import sys
+import time
+import types
 
 from arduino_rpc.protobuf import resolve_field_values, PYTYPE_MAP
-import serial
 from nadamq.NadaMq import cPacket, PACKET_TYPES
+import serial
+
 from .queue import SerialStream, PacketWatcher
 
 logger = logging.getLogger(__name__)
@@ -185,7 +187,7 @@ class SerialProxyMixin(object):
         # Import here, since other classes in this file do not depend on serial
         # libraries directly.
         from serial import Serial
-        from serial_device import get_serial_ports
+        import serial_device as sd
 
         baudrate = kwargs.pop('baudrate', 115200)
         retry_count = kwargs.pop('retry_count', 6)
@@ -196,9 +198,11 @@ class SerialProxyMixin(object):
                              'classes derived from SerialProxyMixin')
 
         if port is None:
-            ports = get_serial_ports()
-        else:
+            ports = sd.comports().index.tolist()
+        elif isinstance(port, types.StringTypes):
             ports = [port]
+        else:
+            ports = port
 
         first_port = True
         for port in ports:
@@ -229,7 +233,8 @@ class SerialProxyMixin(object):
                     self.terminate()
                     continue
                 try:
-                    device_package_name = self.properties['package_name']
+                    properties = self.properties
+                    device_package_name = properties['package_name']
                     if (self.host_package_name
                         is None) or (device_package_name ==
                                      self.host_package_name):
@@ -237,10 +242,10 @@ class SerialProxyMixin(object):
                                     device_package_name, port)
                         return
                     else: # not the device we're looking for
-                        logger.debug('Package name of device (%s) on port (%s)'
-                                     ' does not match package name (%s)',
-                                     device_package_name, port,
-                                     self.host_package_name)
+                        logger.warn('Package name of device (%s) on port (%s)'
+                                    ' does not match package name (%s)',
+                                    device_package_name, port,
+                                    self.host_package_name)
                         self.terminate()
                         break
                 except:
@@ -251,7 +256,7 @@ class SerialProxyMixin(object):
                     raise
 
         raise IOError('Device not found on any port.')
-    
+
 
 class ConfigMixinBase(object):
     '''
@@ -313,7 +318,7 @@ class ConfigMixinBase(object):
             super(ConfigMixinBase, self).save_config()
 
         return return_code
-    
+
     def reset_config(self, **kwargs):
         '''
         Reset fields in the config object to their default values.
