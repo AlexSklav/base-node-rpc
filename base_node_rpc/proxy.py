@@ -90,9 +90,7 @@ class ProxyBase(object):
                                       for k in ['base_node_software_version',
                                                 'package_name', 'display_name',
                                                 'manufacturer', 'url',
-                                                'software_version',
-                                                'hardware_version',
-                                                'id', 'uuid']
+                                                'software_version']
                                       if hasattr(self, k)])
         return pd.Series(properties, dtype=object)
 
