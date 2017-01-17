@@ -86,7 +86,7 @@ def generate_validate_header(py_proto_module_name, sketch_dir):
 
     lib_dir = get_lib_directory()
     if hasattr(mod, c_protobuf_struct_name):
-        package_name = sketch_dir.name
+        package_name = options.PROPERTIES['package_name']
         input_classes, input_headers = get_base_classes_and_headers(options,
                                                                     lib_dir,
                                                                     sketch_dir)
@@ -155,7 +155,7 @@ def generate_command_processor_header(options):
 
     package_name = options.PROPERTIES['package_name']
     module_name = package_name.replace('-', '_')
-    sketch_dir = path(module_name).joinpath('Arduino', module_name)
+    sketch_dir = options.rpc_module.get_sketch_directory()
     lib_dir = base_node_rpc.get_lib_directory()
 
     input_classes, input_headers = get_base_classes_and_headers(options,
@@ -163,7 +163,6 @@ def generate_command_processor_header(options):
                                                                 sketch_dir)
     camel_name = underscore_to_camelcase(module_name)
 
-    sketch_dir = path(module_name).joinpath('Arduino', module_name)
     project_lib_dir = verify_library_directory(options)
     arduino_src_dir = project_lib_dir.joinpath('src', project_lib_dir.name)
     if not arduino_src_dir.isdir():
@@ -226,7 +225,7 @@ def generate_python_code(options):
 
     package_name = options.PROPERTIES['package_name']
     module_name = package_name.replace('-', '_')
-    sketch_dir = path(module_name).joinpath('Arduino', module_name)
+    sketch_dir = options.rpc_module.get_sketch_directory()
     lib_dir = base_node_rpc.get_lib_directory()
     output_file = path(module_name).joinpath('node.py')
     input_classes, input_headers = get_base_classes_and_headers(options,
