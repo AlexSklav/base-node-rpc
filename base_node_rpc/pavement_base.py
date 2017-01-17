@@ -412,14 +412,6 @@ def bdist_wheel():
 
 
 @task
-@needs('build_arduino_library', 'build_firmware', 'generate_setup', 'minilib',
-       'setuptools.command.bdist_wheel')
-def bdist_wheel():
-    """Overrides bdist_wheel to make sure that our setup.py is generated."""
-    pass
-
-
-@task
 @needs('generate_library_main_header', 'generate_protobuf_c_code',
        'generate_protobuf_python_code', 'generate_validate_headers',
        'generate_command_processor_header', 'generate_rpc_buffer_header',
@@ -454,3 +446,10 @@ def generate_library_main_header(options):
 
 #endif  // #ifndef ___{module_name_upper}__H___
     '''.strip().format(module_name_upper=module_name.upper()))
+
+
+@task
+@needs('setuptools.command.install')
+def install(options):
+    """Override install to copy Arduino library to sketch library directory."""
+    pass

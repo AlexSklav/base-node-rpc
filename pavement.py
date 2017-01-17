@@ -55,8 +55,7 @@ options(
                author_email='christian@fobel.net',
                url=URL,
                license='GPLv2',
-               install_requires=['arduino_scons>=0.1.post10',
-                                 'arduino-rpc>=1.7.post19', 'path-helpers',
+               install_requires=['arduino-rpc>=1.7.post19', 'path-helpers',
                                  'protobuf>=2.6.1'],
                # Install data listed in `MANIFEST.in`
                include_package_data=True,
