@@ -23,7 +23,7 @@ def get_sketch_directory():
 
 
 def get_lib_directory():
-    return package_path().joinpath('Arduino', 'library')
+    return package_path().joinpath('..', 'lib').realpath()
 
 
 def get_includes():
@@ -43,8 +43,8 @@ def get_includes():
     '''
     import arduino_rpc
 
-    return list(get_lib_directory()
-                .walkdirs('src')) + arduino_rpc.get_includes()
+    return (list(get_lib_directory().walkdirs('src')) +
+            arduino_rpc.get_includes())
 
 
 def get_sources():
