@@ -208,9 +208,10 @@ def generate_command_processor_header(options):
                                      f(*(args_ + (module_name, )),
                                        pointer_width=pointer_width))
 
+        include_paths = ([lib_dir.realpath()]
+                         + c_array_defs.get_includes())
         write_code(input_headers, input_classes, output_header, f_get_code,
-                   *['-I%s' % p for p in [lib_dir.abspath()] +
-                     c_array_defs.get_includes()],
+                   *['-I%s' % p for p in include_paths],
                    methods_filter=methods_filter,
                    pointer_width=pointer_width)
 
