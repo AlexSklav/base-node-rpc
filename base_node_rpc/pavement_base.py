@@ -1,8 +1,12 @@
 from datetime import datetime
+import os
+import platform
+import sys
 import warnings
 
 from paver.easy import task, needs, path, sh, cmdopts, options
 import base_node_rpc
+import path_helpers as ph
 try:
     from arduino_rpc.pavement_base import *
 except ImportError:
@@ -23,6 +27,38 @@ DEFAULT_POINTER_BITWIDTH = 16
 prefix = 'base_node_rpc.pavement_base.'
 
 
+def conda_prefix():
+    '''
+    Returns
+    -------
+    path_helpers.path
+        Path to Conda environment prefix corresponding to running Python
+        executable.
+
+        Return ``None`` if not running in a Conda environment.
+    '''
+    if any(['continuum analytics, inc.' in sys.version.lower(),
+            'conda' in sys.version.lower()]):
+        # Assume running under Conda.
+        if 'CONDA_PREFIX' in os.environ:
+            conda_prefix = ph.path(os.environ['CONDA_PREFIX'])
+        else:
+            # Infer Conda prefix as parent directory of Python executable.
+            conda_prefix = ph.path(sys.executable).parent.realpath()
+    else:
+        # Assume running under Conda.
+        conda_prefix = None
+    return conda_prefix
+
+
+def conda_arduino_include_path():
+    if platform.system() in ('Linux', 'Darwin'):
+        return conda_prefix().joinpath('include', 'Arduino')
+    elif platform.system() == 'Windows':
+        return conda_prefix().joinpath('Library', 'include', 'Arduino')
+    raise 'Unsupported platform: %s' % platform.system()
+
+
 def get_base_classes_and_headers(options, lib_dir, sketch_dir):
     '''
     Return ordered list of classes to scan for method discovery, along with a
@@ -32,6 +68,7 @@ def get_base_classes_and_headers(options, lib_dir, sketch_dir):
        `base-node-rpc` library directory.
      - rpc classes refer to classes found in the sketch directory.
     '''
+    from . import get_lib_directory
 
     package_name = options.PROPERTIES['package_name']
     module_name = package_name.replace('-', '_')
@@ -39,7 +76,18 @@ def get_base_classes_and_headers(options, lib_dir, sketch_dir):
     rpc_classes = getattr(options, 'rpc_classes', [module_name + '::Node'])
 
     input_classes = ['BaseNode'] + base_classes + rpc_classes
-    base_node_lib_dir = lib_dir.joinpath('BaseNodeRpc', 'src', 'BaseNodeRpc')
+
+    # Assume `base-node-rpc` has already been installed as a Conda package.
+    base_node_lib_dir = conda_arduino_include_path().joinpath('BaseNodeRpc',
+                                                              'src',
+                                                              'BaseNodeRpc')
+    if not base_node_lib_dir.isdir():
+        # Library directory not found in Conda include paths since
+        # `base-node-rpc` has **not** been installed as a Conda package.
+        #
+        # Assume running code from source directory.
+        base_node_lib_dir = get_lib_directory().joinpath('BaseNodeRpc', 'src',
+                                                         'BaseNodeRpc')
     input_headers = ([base_node_lib_dir.joinpath('BaseNode.h')] +
                      [base_node_lib_dir.joinpath('%s.h' % c.split('<')[0])
                       for c in base_classes] +
@@ -87,23 +135,30 @@ def generate_validate_header(py_proto_module_name, sketch_dir):
     lib_dir = get_lib_directory()
     if hasattr(mod, c_protobuf_struct_name):
         package_name = options.PROPERTIES['package_name']
+        module_name = package_name.replace('-', '_')
         input_classes, input_headers = get_base_classes_and_headers(options,
                                                                     lib_dir,
                                                                     sketch_dir)
 
         message_type = getattr(mod, c_protobuf_struct_name)
-        args = ['-I%s' % p for p in [lib_dir.abspath()] +
-                c_array_defs.get_includes()]
+
+        # Add stub `stdint.h` header to includes path.
+        stdint_stub_path = (ph.path(__file__).parent.joinpath('StdIntStub')
+                            .realpath())
+        args = ['-DSTDINT_STUB']
+        include_paths = ([stdint_stub_path, lib_dir.realpath()] +
+                         c_array_defs.get_includes())
+        args += ['-I%s' % p for p in include_paths]
 
         validator_code = get_handler_validator_class_code(input_headers,
                                                           input_classes,
                                                           message_type, *args)
 
         output_path = path(sketch_dir).joinpath('%s_%s_validate.h' %
-                                                (package_name,
+                                                (module_name,
                                                  c_protobuf_struct_name
                                                  .lower()))
-        write_handler_validator_header(output_path, package_name,
+        write_handler_validator_header(output_path, module_name,
                                        c_protobuf_struct_name.lower(),
                                        validator_code)
 
@@ -208,11 +263,15 @@ def generate_command_processor_header(options):
                                      f(*(args_ + (module_name, )),
                                        pointer_width=pointer_width))
 
-        include_paths = ([lib_dir.realpath()]
-                         + c_array_defs.get_includes())
+        # Add stub `stdint.h` header to includes path.
+        stdint_stub_path = (ph.path(__file__).parent.joinpath('StdIntStub')
+                            .realpath())
+        args = ['-DSTDINT_STUB']
+        include_paths = ([stdint_stub_path, lib_dir.realpath()] +
+                         c_array_defs.get_includes())
+        args += ['-I%s' % p for p in include_paths]
         write_code(input_headers, input_classes, output_header, f_get_code,
-                   *['-I%s' % p for p in include_paths],
-                   methods_filter=methods_filter,
+                   *args, methods_filter=methods_filter,
                    pointer_width=pointer_width)
 
 
@@ -253,9 +312,16 @@ class SerialProxy(SerialProxyMixin, Proxy):
                                                    pointer_width))
     methods_filter = getattr(options, 'methods_filter', DEFAULT_METHODS_FILTER)
     pointer_width = getattr(options, 'pointer_width', DEFAULT_POINTER_BITWIDTH)
+
+    # Add stub `stdint.h` header to includes path.
+    stdint_stub_path = (ph.path(__file__).parent.joinpath('StdIntStub')
+                        .realpath())
+    args = ['-DSTDINT_STUB']
+    include_paths = ([stdint_stub_path, lib_dir.realpath()] +
+                     c_array_defs.get_includes())
+    args += ['-I%s' % p for p in include_paths]
     write_code(input_headers, input_classes, output_file, f_python_code,
-               *['-I%s' % p for p in [lib_dir.abspath()] +
-                 c_array_defs.get_includes()], methods_filter=methods_filter,
+               *args, methods_filter=methods_filter,
                pointer_width=pointer_width)
 
 
@@ -412,14 +478,6 @@ def bdist_wheel():
 
 
 @task
-@needs('build_arduino_library', 'build_firmware', 'generate_setup', 'minilib',
-       'setuptools.command.bdist_wheel')
-def bdist_wheel():
-    """Overrides bdist_wheel to make sure that our setup.py is generated."""
-    pass
-
-
-@task
 @needs('generate_library_main_header', 'generate_protobuf_c_code',
        'generate_protobuf_python_code', 'generate_validate_headers',
        'generate_command_processor_header', 'generate_rpc_buffer_header',
@@ -454,3 +512,10 @@ def generate_library_main_header(options):
 
 #endif  // #ifndef ___{module_name_upper}__H___
     '''.strip().format(module_name_upper=module_name.upper()))
+
+
+@task
+@needs('setuptools.command.install')
+def install(options):
+    """Override install to copy Arduino library to sketch library directory."""
+    pass
