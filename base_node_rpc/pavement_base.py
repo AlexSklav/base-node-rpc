@@ -140,8 +140,14 @@ def generate_validate_header(py_proto_module_name, sketch_dir):
                                                                     sketch_dir)
 
         message_type = getattr(mod, c_protobuf_struct_name)
-        args = ['-I%s' % p for p in [lib_dir.abspath()] +
-                c_array_defs.get_includes()]
+
+        # Add stub `stdint.h` header to includes path.
+        stdint_stub_path = (ph.path(__file__).parent.joinpath('StdIntStub')
+                            .realpath())
+        args = ['-DSTDINT_STUB']
+        include_paths = ([stdint_stub_path, lib_dir.realpath()] +
+                         c_array_defs.get_includes())
+        args += ['-I%s' % p for p in include_paths]
 
         validator_code = get_handler_validator_class_code(input_headers,
                                                           input_classes,
@@ -256,11 +262,15 @@ def generate_command_processor_header(options):
                                      f(*(args_ + (module_name, )),
                                        pointer_width=pointer_width))
 
-        include_paths = ([lib_dir.realpath()]
-                         + c_array_defs.get_includes())
+        # Add stub `stdint.h` header to includes path.
+        stdint_stub_path = (ph.path(__file__).parent.joinpath('StdIntStub')
+                            .realpath())
+        args = ['-DSTDINT_STUB']
+        include_paths = ([stdint_stub_path, lib_dir.realpath()] +
+                         c_array_defs.get_includes())
+        args += ['-I%s' % p for p in include_paths]
         write_code(input_headers, input_classes, output_header, f_get_code,
-                   *['-I%s' % p for p in include_paths],
-                   methods_filter=methods_filter,
+                   *args, methods_filter=methods_filter,
                    pointer_width=pointer_width)
 
 
@@ -301,9 +311,16 @@ class SerialProxy(SerialProxyMixin, Proxy):
                                                    pointer_width))
     methods_filter = getattr(options, 'methods_filter', DEFAULT_METHODS_FILTER)
     pointer_width = getattr(options, 'pointer_width', DEFAULT_POINTER_BITWIDTH)
+
+    # Add stub `stdint.h` header to includes path.
+    stdint_stub_path = (ph.path(__file__).parent.joinpath('StdIntStub')
+                        .realpath())
+    args = ['-DSTDINT_STUB']
+    include_paths = ([stdint_stub_path, lib_dir.realpath()] +
+                     c_array_defs.get_includes())
+    args += ['-I%s' % p for p in include_paths]
     write_code(input_headers, input_classes, output_file, f_python_code,
-               *['-I%s' % p for p in [lib_dir.abspath()] +
-                 c_array_defs.get_includes()], methods_filter=methods_filter,
+               *args, methods_filter=methods_filter,
                pointer_width=pointer_width)
 
 
