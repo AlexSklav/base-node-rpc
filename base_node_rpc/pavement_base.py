@@ -1,8 +1,12 @@
 from datetime import datetime
+import os
+import platform
+import sys
 import warnings
 
 from paver.easy import task, needs, path, sh, cmdopts, options
 import base_node_rpc
+import path_helpers as ph
 try:
     from arduino_rpc.pavement_base import *
 except ImportError:
@@ -23,6 +27,38 @@ DEFAULT_POINTER_BITWIDTH = 16
 prefix = 'base_node_rpc.pavement_base.'
 
 
+def conda_prefix():
+    '''
+    Returns
+    -------
+    path_helpers.path
+        Path to Conda environment prefix corresponding to running Python
+        executable.
+
+        Return ``None`` if not running in a Conda environment.
+    '''
+    if any(['continuum analytics, inc.' in sys.version.lower(),
+            'conda' in sys.version.lower()]):
+        # Assume running under Conda.
+        if 'CONDA_PREFIX' in os.environ:
+            conda_prefix = ph.path(os.environ['CONDA_PREFIX'])
+        else:
+            # Infer Conda prefix as parent directory of Python executable.
+            conda_prefix = ph.path(sys.executable).parent.realpath()
+    else:
+        # Assume running under Conda.
+        conda_prefix = None
+    return conda_prefix
+
+
+def conda_arduino_include_path():
+    if platform.system() in ('Linux', 'Darwin'):
+        return conda_prefix().joinpath('include', 'Arduino')
+    elif platform.system() == 'Windows':
+        return conda_prefix().joinpath('Library', 'include', 'Arduino')
+    raise 'Unsupported platform: %s' % platform.system()
+
+
 def get_base_classes_and_headers(options, lib_dir, sketch_dir):
     '''
     Return ordered list of classes to scan for method discovery, along with a
@@ -32,6 +68,7 @@ def get_base_classes_and_headers(options, lib_dir, sketch_dir):
        `base-node-rpc` library directory.
      - rpc classes refer to classes found in the sketch directory.
     '''
+    from . import get_lib_directory
 
     package_name = options.PROPERTIES['package_name']
     module_name = package_name.replace('-', '_')
@@ -39,7 +76,18 @@ def get_base_classes_and_headers(options, lib_dir, sketch_dir):
     rpc_classes = getattr(options, 'rpc_classes', [module_name + '::Node'])
 
     input_classes = ['BaseNode'] + base_classes + rpc_classes
-    base_node_lib_dir = lib_dir.joinpath('BaseNodeRpc', 'src', 'BaseNodeRpc')
+
+    # Assume `base-node-rpc` has already been installed as a Conda package.
+    base_node_lib_dir = conda_arduino_include_path().joinpath('BaseNodeRpc',
+                                                              'src',
+                                                              'BaseNodeRpc')
+    if not base_node_lib_dir.isdir():
+        # Library directory not found in Conda include paths since
+        # `base-node-rpc` has **not** been installed as a Conda package.
+        #
+        # Assume running code from source directory.
+        base_node_lib_dir = get_lib_directory().joinpath('BaseNodeRpc', 'src',
+                                                         'BaseNodeRpc')
     input_headers = ([base_node_lib_dir.joinpath('BaseNode.h')] +
                      [base_node_lib_dir.joinpath('%s.h' % c.split('<')[0])
                       for c in base_classes] +
