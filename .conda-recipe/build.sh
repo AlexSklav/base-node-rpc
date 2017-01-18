@@ -1,6 +1,8 @@
 mkdir -p "${PREFIX}"/include/Arduino
 
 # Generate Arduino `library.properties` file
+"${PYTHON}" -m paver generate_arduino_library_properties
+# Generate Arduino code
 "${PYTHON}" -m paver generate_all_code
 rc=$?; if [[ $rc != 0  ]]; then exit $rc; fi
 # Copy Arduino library to Conda include directory

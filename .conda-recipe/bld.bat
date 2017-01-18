@@ -4,6 +4,8 @@ md "%PREFIX%"\Library\include\Arduino
 endlocal
 
 REM Generate Arduino `library.properties` file
+"%PYTHON%" -m paver generate_arduino_library_properties
+REM Generate Arduino code
 "%PYTHON%" -m paver generate_all_code
 if errorlevel 1 exit 1
 REM Copy Arduino library to Conda include directory
