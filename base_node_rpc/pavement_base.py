@@ -135,6 +135,7 @@ def generate_validate_header(py_proto_module_name, sketch_dir):
     lib_dir = get_lib_directory()
     if hasattr(mod, c_protobuf_struct_name):
         package_name = options.PROPERTIES['package_name']
+        module_name = package_name.replace('-', '_')
         input_classes, input_headers = get_base_classes_and_headers(options,
                                                                     lib_dir,
                                                                     sketch_dir)
@@ -154,10 +155,10 @@ def generate_validate_header(py_proto_module_name, sketch_dir):
                                                           message_type, *args)
 
         output_path = path(sketch_dir).joinpath('%s_%s_validate.h' %
-                                                (package_name,
+                                                (module_name,
                                                  c_protobuf_struct_name
                                                  .lower()))
-        write_handler_validator_header(output_path, package_name,
+        write_handler_validator_header(output_path, module_name,
                                        c_protobuf_struct_name.lower(),
                                        validator_code)
 
