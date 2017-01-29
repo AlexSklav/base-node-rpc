@@ -26,7 +26,11 @@ public:
   UInt8Array get_buffer() { return UInt8Array_init(sizeof(buffer_), buffer_); }
   void begin() {
 #if !defined(DISABLE_SERIAL)
+#if F_CPU == 8000000L
+    Serial.begin(57600);
+#else
     Serial.begin(115200);
+#endif  // #if F_CPU == 8000000L
 #endif  // #ifndef DISABLE_SERIAL
     // Set i2c clock-rate to 400kHz.
     TWBR = 12;

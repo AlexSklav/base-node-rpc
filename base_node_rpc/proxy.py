@@ -276,7 +276,7 @@ class ConfigMixinBase(object):
     @property
     def config(self):
         import pandas as pd
-        
+
         try:
             fv = resolve_field_values(self._config_pb,
                                       set_default=True).set_index(['full_name'])
