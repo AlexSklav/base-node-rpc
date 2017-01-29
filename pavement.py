@@ -59,3 +59,15 @@ options(
                # Install data listed in `MANIFEST.in`
                include_package_data=True,
                packages=[str(PROJECT_PREFIX)]))
+
+
+@task
+@needs('generate_all_code')
+def build_firmware():
+    sh('pio run')
+
+
+@task
+@needs('build_firmware')
+def upload():
+    sh('pio run --target upload --target nobuild')
