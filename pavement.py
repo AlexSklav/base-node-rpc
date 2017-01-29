@@ -12,8 +12,7 @@ import version
 install_distutils_tasks()
 
 DEFAULT_ARDUINO_BOARDS = ['uno', 'mega2560']
-PROJECT_PREFIX = [d for d in path('.').dirs()
-                  if d.joinpath('Arduino').isdir()][0].name
+PROJECT_PREFIX = 'base_node_rpc'
 rpc_module = import_module(PROJECT_PREFIX)
 VERSION = version.getVersion()
 URL='http://github.com/wheeler-microfluidics/%s.git' % PROJECT_PREFIX
