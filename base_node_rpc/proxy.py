@@ -178,9 +178,22 @@ class SerialProxyMixin(object):
         '''
         Attempt to auto-connect to a proxy.
 
-        If `name` is specified, only connect to proxy matching name.
-        If `verify` callback is specified, only connect to proxy where `verify`
-        returns `True`.
+        Parameters
+        ----------
+        settling_time_s : float, optional
+            If specified, wait :data:`settling_time_s` seconds after
+            establishing serial connection before trying to execute test
+            command.
+
+            Useful, for example, to allow Arduino boards that reset upon
+            connection to initialize before attempting serial communication.
+
+            By default, :data:`settling_time_s` is assumed to be zero.
+        name : str, optional
+            If specified, only connect to proxy matching name.
+        verify : function, optional
+            If `verify` callback is specified, only connect to proxy where
+            :data:`verify` function returns `True`.
         '''
         # Import here, since other classes in this file do not depend on serial
         # libraries directly.
@@ -189,6 +202,7 @@ class SerialProxyMixin(object):
 
         baudrate = kwargs.pop('baudrate', 115200)
         retry_count = kwargs.pop('retry_count', 6)
+        settling_time_s = kwargs.pop('settling_time_s', 0)
         port = kwargs.pop('port', None)
         auto_close_stream = kwargs.pop('auto_close_stream', True)
         if not auto_close_stream:
@@ -220,7 +234,7 @@ class SerialProxyMixin(object):
                 else:
                     self.stream = stream
 
-                time.sleep(.5 * i)
+                time.sleep(settling_time_s + .5 * i)
 
                 try:
                     self.ram_free()
