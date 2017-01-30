@@ -25,7 +25,7 @@ extern void i2c_receive_event(int byte_count);
 extern void i2c_request_event();
 
 
-class BaseNodeI2c : public BufferIFace {
+class BaseNodeI2c : virtual public BufferIFace {
 public:
   void set_clock(uint32_t frequency) { Wire.setClock(frequency); }
   void set_i2c_address(uint8_t address) { Wire.begin(address); }

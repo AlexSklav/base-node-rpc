@@ -19,7 +19,7 @@ def get_sketch_directory():
     '''
     Return directory containing the Arduino sketch.
     '''
-    return package_path().joinpath('Arduino', package_path().name)
+    return package_path().joinpath('..', 'src')
 
 
 def get_lib_directory():

@@ -17,11 +17,23 @@ requirements:
     - future
     - paver
     - pip
+    - platformio-framework-arduinoavr
+    - platformio-framework-arduinoteensy
+    - platformio-helpers
+    - platformio-tool-avrdude
+    - platformio-tool-scons
+    - platformio-tool-teensy
+    - platformio-toolchain-atmelavr
+    - platformio-toolchain-gccarmnoneeabi
     - python 2.7*
 
   run:
     - arduino-rpc >=1.8.post1
     - python 2.7*
+    - platformio-helpers
+    - platformio-tool-avrdude
+    - platformio-tool-scons
+    - platformio-tool-teensy
 
 about:
   home: https://github.com/wheeler-microfluidics/base-node-rpc

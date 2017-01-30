@@ -7,7 +7,7 @@
 #include <avr/io.h>  // End of eeprom: `E2END`
 
 
-class BaseNodeEeprom : public BufferIFace {
+class BaseNodeEeprom : virtual public BufferIFace {
 public:
   void update_eeprom_block(uint32_t address, UInt8Array data) {
     cli();
