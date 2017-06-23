@@ -53,18 +53,39 @@ class PacketQueueManager(object):
             ``str-like`` value.
         '''
         data = stream.read()
+        self.parse(data)
 
+    def parse(self, data):
+        '''
+        Parse data.
+
+        For each complete packet contained in the parsed data (or a packet
+        started on previous read that is completed), push the packet on a queue
+        according to the type of packet: ``data``, ``ack``, or ``stream``.
+
+        Parameters
+        ----------
+        data : str or bytes
+        '''
         packets = []
 
         for c in data:
             result = self._packet_parser.parse(np.fromstring(c, dtype='uint8'))
             if result != False:
+                # A full packet has been parsed.
                 packet_str = np.fromstring(result.tostring(), dtype='uint8')
+                # Add parsed packet to list of packets parsed during this
+                # method call.
                 packets.append((datetime.now(), cPacketParser().parse(packet_str)))
+                # Reset the state of the packet parser to prepare for next packet.
                 self._packet_parser.reset()
             elif self._packet_parser.error:
+                # A parsing error occurred.
+                # Reset the state of the packet parser to prepare for next packet.
                 self._packet_parser.reset()
 
+        # Filter packets parsed during this method call and queue according to
+        # packet type.
         for t, p in packets:
             if p.type_ == PACKET_TYPES.DATA and not self.queue_full('data'):
                 self.packet_queues['data'].put((t, p))

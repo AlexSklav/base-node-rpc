@@ -1,16 +1,20 @@
 from collections import OrderedDict
+import Queue
 import datetime
 import logging
 import pkg_resources
 import sys
+import threading
 import time
 import types
 
 from arduino_rpc.protobuf import resolve_field_values, PYTYPE_MAP
 from nadamq.NadaMq import cPacket, PACKET_TYPES
 import serial
+import serial_device as sd
+import serial_device.threaded
 
-from .queue import SerialStream, PacketWatcher
+from .queue import PacketQueueManager
 
 logger = logging.getLogger(__name__)
 
@@ -18,15 +22,13 @@ logger = logging.getLogger(__name__)
 class ProxyBase(object):
     host_package_name = None
 
-    def __init__(self, stream, buffer_bounds_check=True, high_water_mark=10,
-                 auto_close_stream=False):
+    def __init__(self, buffer_bounds_check=True, high_water_mark=10,
+                 timeout_s=10):
         self._buffer_bounds_check = buffer_bounds_check
         self._buffer_size = None
-        self._packet_watcher = None
-        self._timeout_s = 0.5
-        self._auto_close_stream = True
-        self._stream = stream
-        self._reset_packet_watcher(stream, high_water_mark)
+        self._packet_queue_manager = PacketQueueManager(high_water_mark=
+                                                        high_water_mark)
+        self._timeout_s = 10
 
     @property
     def host_software_version(self):
@@ -40,9 +42,6 @@ class ProxyBase(object):
     def remote_software_version(self):
         return pkg_resources.parse_version(self.properties.software_version)
 
-    def reset(self):
-        self._reset_packet_watcher(self.stream, self.high_water_mark)
-
     @property
     def stream(self):
         return self._stream
@@ -52,26 +51,13 @@ class ProxyBase(object):
         self._stream = stream
         self.reset()
 
-    def _reset_packet_watcher(self, stream, high_water_mark):
-        packet_watcher = PacketWatcher(stream,
-                                       high_water_mark=high_water_mark)
-        packet_watcher.start()
-
-        # Terminate existing watcher thread.
-        if self._packet_watcher is not None:
-            self._packet_watcher.terminate()
-
-        # Set new watcher.
-        self._packet_watcher = packet_watcher
-        self._packet_watcher.enabled = True
-
     @property
     def high_water_mark(self):
-        return self._packet_watcher.message_parser.high_water_mark
+        return self._packet_queue_manager.high_water_mark
 
     @high_water_mark.setter
     def high_water_mark(self, message_count):
-        self._packet_watcher.message_parser.high_water_mark = message_count
+        self._packet_queue_manager.high_water_mark = message_count
 
     def help(self):
         '''
@@ -119,44 +105,13 @@ class ProxyBase(object):
             self._buffer_bounds_check = True
         return self._buffer_size
 
-    def _send_command(self, packet):
-        if self._buffer_bounds_check and len(packet.data()) > self.buffer_size:
-            raise IOError('Packet size %s bytes too large.' %
-                          (len(packet.data()) - self.buffer_size))
-
-        # Flush outstanding data packets.
-        for p in xrange(self.queues['data'].qsize()):
-            self.queues['data'].get()
-
-        self._packet_watcher.enabled = False
-        try:
-            self._stream.write(packet.tostring())
-            result = self._read_response()
-        finally:
-            self._packet_watcher.enabled = True
-        return result
-
-    def _read_response(self):
-        start = datetime.datetime.now()
-        while self.queues['data'].qsize() < 1:
-            self._packet_watcher.parse_available()
-            if self._timeout_s < (datetime.datetime.now() -
-                                  start).total_seconds():
-               raise IOError('Timed out waiting for response.')
-        # Return packet from queue.
-        return self.queues['data'].get()[1]
-
     @property
     def queues(self):
-        return self._packet_watcher.queues
+        return self._packet_queue_manager.packet_queues
 
-    def terminate(self):
-        self._packet_watcher.terminate()
-        if self._auto_close_stream:
-            self._stream.close()
-
-    def __del__(self):
-        self.terminate()
+    def _send_command(self, packet, timeout_s=None,
+                      poll=sd.threaded.POLL_QUEUES):
+        raise NotImplementedError
 
 
 class I2cProxyMixin(object):
@@ -180,6 +135,8 @@ class SerialProxyMixin(object):
 
         Parameters
         ----------
+        port : str, optional
+        baudrate : int, optional
         settling_time_s : float, optional
             If specified, wait :data:`settling_time_s` seconds after
             establishing serial connection before trying to execute test
@@ -189,26 +146,53 @@ class SerialProxyMixin(object):
             connection to initialize before attempting serial communication.
 
             By default, :data:`settling_time_s` is assumed to be zero.
-        name : str, optional
-            If specified, only connect to proxy matching name.
-        verify : function, optional
-            If `verify` callback is specified, only connect to proxy where
-            :data:`verify` function returns `True`.
+        retry_count : int, optional
         '''
-        # Import here, since other classes in this file do not depend on serial
-        # libraries directly.
-        from serial import Serial
-        import serial_device as sd
-
-        baudrate = kwargs.pop('baudrate', 115200)
-        retry_count = kwargs.pop('retry_count', 6)
-        settling_time_s = kwargs.pop('settling_time_s', 0)
         port = kwargs.pop('port', None)
-        auto_close_stream = kwargs.pop('auto_close_stream', True)
-        if not auto_close_stream:
-            raise ValueError('auto_close_stream must be set to true for '
-                             'classes derived from SerialProxyMixin')
+        baudrate = kwargs.pop('baudrate', 115200)
+        settling_time_s = kwargs.pop('settling_time_s', 0)
+        retry_count = kwargs.pop('retry_count', 6)
 
+        super(SerialProxyMixin, self).__init__(**kwargs)
+
+        # Event to indicate that device has been connected to and correctly
+        # identified.
+        self.device_verified = threading.Event()
+
+        self._connect(port=port, baudrate=baudrate,
+                      settling_time_s=settling_time_s, retry_count=retry_count)
+
+    def reconnection_made(self, protocol):
+        '''
+        Callback called if/when device is reconnected to port after lost
+        connection.
+        '''
+        logger.debug('Reconnected to `%s`', protocol.port)
+
+    def connection_lost(self, protocol, exception):
+        '''
+        Callback called if/when serial connection is lost.
+        '''
+        logger.debug('Connection lost `%s`', protocol.port)
+
+    def _connect(self, port=None, baudrate=115200, retry_count=6,
+                 settling_time_s=0):
+        '''
+        Parameters
+        ----------
+        port : str, optional
+        baudrate : int, optional
+        settling_time_s : float, optional
+            If specified, wait :data:`settling_time_s` seconds after
+            establishing serial connection before trying to execute test
+            command.
+
+            Useful, for example, to allow Arduino boards that reset upon
+            connection to initialize before attempting serial communication.
+
+            By default, :data:`settling_time_s` is assumed to be zero.
+        retry_count : int, optional
+        '''
         if port is None:
             ports = sd.comports().index.tolist()
         elif isinstance(port, types.StringTypes):
@@ -216,23 +200,40 @@ class SerialProxyMixin(object):
         else:
             ports = port
 
-        first_port = True
+        parent = self
+
+        class PacketProtocol(sd.threaded.EventProtocol):
+            def connection_made(self, transport):
+                super(PacketProtocol, self).connection_made(transport)
+                if parent.device_verified.is_set():
+                    # Device identity has been previously verified.
+                    # Must be reconnecting after lost connection.
+                    parent.reconnection_made(self)
+
+            def data_received(self, data):
+                # New data received from serial port.  Parse using queue
+                # manager.
+                parent._packet_queue_manager.parse(data)
+
+            def connection_lost(self, exception):
+                super(PacketProtocol, self).connection_lost(exception)
+                parent.connection_lost(self, exception)
+
         for port in ports:
             for i in xrange(retry_count):
                 try:
-                    serial_device = Serial(port, baudrate=baudrate)
+                    # Launch background thread to:
+                    #
+                    #  - Connect to serial port
+                    #  - Listen for incoming data and parse into packets.
+                    #  - Attempt to reconnect if disconnected.
+                    self.serial_thread = (sd.threaded
+                                          .KeepAliveReader(PacketProtocol,
+                                                           port,
+                                                           baudrate=baudrate)
+                                          .__enter__())
                 except serial.SerialException:
                     continue
-                stream = SerialStream(serial_device)
-
-                if first_port:
-                    super(SerialProxyMixin, self).__init__(stream,
-                                                           auto_close_stream=
-                                                           auto_close_stream,
-                                                           **kwargs)
-                    first_port = False
-                else:
-                    self.stream = stream
 
                 time.sleep(settling_time_s + .5 * i)
 
@@ -252,6 +253,7 @@ class SerialProxyMixin(object):
                                      self.host_package_name):
                         logger.info('Successfully connected to %s on port %s',
                                     device_package_name, port)
+                        self.device_verified.set()
                         return
                     else: # not the device we're looking for
                         logger.warn('Package name of device (%s) on port (%s)'
@@ -268,6 +270,32 @@ class SerialProxyMixin(object):
                     raise
 
         raise IOError('Device not found on any port.')
+
+    def terminate(self):
+        if self.serial_thread is not None:
+            self.serial_thread.__exit__()
+
+    def _send_command(self, packet, timeout_s=None,
+                      poll=sd.threaded.POLL_QUEUES):
+        if timeout_s is None:
+            timeout_s = self._timeout_s
+
+        if self._buffer_bounds_check and len(packet.data()) > self.buffer_size:
+            raise IOError('Packet size %s bytes too large.' %
+                          (len(packet.data()) - self.buffer_size))
+
+        # Flush outstanding data packets.
+        for p in xrange(self.queues['data'].qsize()):
+            self.queues['data'].get()
+
+        try:
+            timestamp, response = (self.serial_thread
+                                   .request(self.queues['data'],
+                                            packet.tostring(),
+                                            timeout_s=timeout_s, poll=poll))
+        except Queue.Empty:
+            raise IOError('Did not receive response.')
+        return response
 
 
 class ConfigMixinBase(object):
