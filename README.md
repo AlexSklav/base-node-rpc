@@ -1,4 +1,3 @@
-![https://ci.appveyor.com/api/projects/status/github/wheeler-microfluidics/base-node-rpc?branch=master&svg=true](https://ci.appveyor.com/api/projects/status/github/wheeler-microfluidics/base-node-rpc?branch=master&svg=true)
 # base-node-rpc #
 
 Base classes for Arduino RPC node/device.
