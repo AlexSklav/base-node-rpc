@@ -13,6 +13,7 @@ from nadamq.NadaMq import cPacket, PACKET_TYPES
 import serial
 import serial_device as sd
 import serial_device.threaded
+import serial_device.or_event
 
 from .queue import PacketQueueManager
 
@@ -222,6 +223,8 @@ class SerialProxyMixin(object):
         for port in ports:
             for i in xrange(retry_count):
                 try:
+                    logger.debug('Attempt to connect to device on port %s '
+                                 '(baudrate=%s)', port, baudrate)
                     # Launch background thread to:
                     #
                     #  - Connect to serial port
@@ -232,8 +235,15 @@ class SerialProxyMixin(object):
                                                            port,
                                                            baudrate=baudrate)
                                           .__enter__())
+                    event = sd.or_event.OrEvent(self.serial_thread.closed,
+                                                self.serial_thread.connected)
                 except serial.SerialException:
                     continue
+
+                logger.debug('Wait for connection to port %s', port)
+                event.wait()
+                if self.serial_thread.error.is_set():
+                    raise self.serial_thread.error.exception
 
                 time.sleep(settling_time_s + .5 * i)
 
