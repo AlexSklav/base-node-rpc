@@ -27,6 +27,13 @@ DEFAULT_POINTER_BITWIDTH = 16
 prefix = 'base_node_rpc.pavement_base.'
 
 
+def _get_module_name(properties):
+    if 'module_name' in properties:
+        return properties['module_name']
+    else:
+        return properties['package_name'].replace('-', '_')
+
+
 def conda_prefix():
     '''
     Returns
@@ -71,7 +78,7 @@ def get_base_classes_and_headers(options, lib_dir, sketch_dir):
     from . import get_lib_directory
 
     package_name = options.PROPERTIES['package_name']
-    module_name = package_name.replace('-', '_')
+    module_name = _get_module_name(options.PROPERTIES)
     base_classes = getattr(options, 'base_classes', DEFAULT_BASE_CLASSES)
     rpc_classes = getattr(options, 'rpc_classes', [module_name + '::Node'])
 
@@ -135,7 +142,7 @@ def generate_validate_header(py_proto_module_name, sketch_dir):
     lib_dir = get_lib_directory()
     if hasattr(mod, c_protobuf_struct_name):
         package_name = options.PROPERTIES['package_name']
-        module_name = package_name.replace('-', '_')
+        module_name = _get_module_name(options.PROPERTIES)
         input_classes, input_headers = get_base_classes_and_headers(options,
                                                                     lib_dir,
                                                                     sketch_dir)
@@ -209,7 +216,7 @@ def generate_command_processor_header(options):
     import jinja2
 
     package_name = options.PROPERTIES['package_name']
-    module_name = package_name.replace('-', '_')
+    module_name = _get_module_name(options.PROPERTIES)
     sketch_dir = options.rpc_module.get_sketch_directory()
     lib_dir = base_node_rpc.get_lib_directory()
 
@@ -284,7 +291,7 @@ def generate_python_code(options):
     import c_array_defs
 
     package_name = options.PROPERTIES['package_name']
-    module_name = package_name.replace('-', '_')
+    module_name = _get_module_name(options.PROPERTIES)
     sketch_dir = options.rpc_module.get_sketch_directory()
     lib_dir = base_node_rpc.get_lib_directory()
     output_file = path(module_name).joinpath('node.py')
@@ -347,7 +354,7 @@ def generate_protobuf_c_code(options):
             kwargs = {}
 
         package_name = options.PROPERTIES['package_name']
-        module_name = package_name.replace('-', '_')
+        module_name = _get_module_name(options.PROPERTIES)
         project_lib_dir = verify_library_directory(options)
         arduino_src_dir = project_lib_dir.joinpath('src', project_lib_dir.name)
         if not arduino_src_dir.isdir():
@@ -378,8 +385,8 @@ def generate_protobuf_python_code(options):
     for proto_path in sketch_dir.abspath().files('*.proto'):
         proto_name = proto_path.namebase
         pb_code = npb.compile_pb(proto_path)
-        output_path = path(options.PROPERTIES['package_name']
-                           .replace('-', '_')).joinpath(proto_name + '.py')
+        module_name = _get_module_name(options.PROPERTIES)
+        output_path = path(module_name).joinpath(proto_name + '.py')
         output_path.write_bytes(pb_code['python'])
 
 
