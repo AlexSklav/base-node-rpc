@@ -13,7 +13,7 @@ package:
 
 requirements:
   build:
-    - arduino-rpc >=1.8.post1
+    - arduino-rpc >=1.10
     - future
     - paver
     - pip
@@ -26,16 +26,16 @@ requirements:
     - platformio-toolchain-atmelavr
     - platformio-toolchain-gccarmnoneeabi
     - python 2.7*
-    - serial-device >=0.7
+    - serial-device >=0.8
 
   run:
-    - arduino-rpc >=1.8.post1
+    - arduino-rpc >=1.10
     - python 2.7*
     - platformio-helpers
     - platformio-tool-avrdude
     - platformio-tool-scons
     - platformio-tool-teensy
-    - serial-device >=0.7
+    - serial-device >=0.8
 
 about:
   home: https://github.com/wheeler-microfluidics/base-node-rpc
