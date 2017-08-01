@@ -115,11 +115,10 @@ def get_handler_validator_class_code(header, class_, message_type, *args,
                                                     prefix=message_type.DESCRIPTOR
                                                     .name.lower() + '_',
                                                     *args, **kwargs)
-    except ValueError:
-        df_handlers_template = pd.DataFrame()
-    else:
         df_handlers_template = get_handler_template_frame(df_handler_sig,
                                                           message_type)
+    except ValueError:
+        df_handlers_template = pd.DataFrame()
     template = '''
 {%- for i, row in df_handlers.iterrows() -%}
 template <typename NodeT>
