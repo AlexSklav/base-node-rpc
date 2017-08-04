@@ -266,7 +266,7 @@ class SerialProxyMixin(object):
                         self.device_verified.set()
                         return
                     else: # not the device we're looking for
-                        logger.warn('Package name of device (%s) on port (%s)'
+                        logger.info('Package name of device (%s) on port (%s)'
                                     ' does not match package name (%s)',
                                     device_package_name, port,
                                     self.host_package_name)
