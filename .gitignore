@@ -3,14 +3,13 @@ RELEASE-VERSION
 *.hex
 *.pyc
 .ropeproject
-*/Arduino/*/Config.h
 setup.py
 paver-minilib.zip
 build/*
 */*_pb2.py
 lib/*
-*/Arduino/*/NodeCommandProcessor.h
-*/Arduino/*/RPCBuffer.h
+src/NodeCommandProcessor.h
+src/RPCBuffer.h
 */lib
 *.o
 */protobuf/nano
@@ -25,3 +24,4 @@ build
 .pydevproject
 .project
 .idea
+.pioenvs
