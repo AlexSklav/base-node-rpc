@@ -14,14 +14,17 @@ import serial
 import serial_device as sd
 import serial_device.threaded
 import serial_device.or_event
+import path_helpers as ph
 
 from .queue import PacketQueueManager
+from . import __version__
 
 logger = logging.getLogger(__name__)
 
 
 class ProxyBase(object):
     host_package_name = None
+    __host_software_version__ = __version__
 
     def __init__(self, buffer_bounds_check=True, high_water_mark=10,
                  timeout_s=10):
@@ -33,11 +36,7 @@ class ProxyBase(object):
 
     @property
     def host_software_version(self):
-        return pkg_resources.parse_version(
-             pkg_resources.get_distribution(
-                 self.properties['package_name']
-             ).version
-         )
+        return pkg_resources.parse_version(self.__host_software_version__)
 
     @property
     def remote_software_version(self):

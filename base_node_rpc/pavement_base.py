@@ -445,31 +445,6 @@ def init_config():
 
 
 @task
-@needs('generate_all_code')
-@cmdopts([('sconsflags=', 'f', 'Flags to pass to SCons.'),
-          ('boards=', 'B', 'Comma-separated list of board names to compile '
-           'for (e.g., `uno`).')])
-def build_firmware():
-    scons_flags = getattr(options, 'sconsflags', '')
-    boards = [b.strip() for b in getattr(options, 'boards', '').split(',')
-              if b.strip()]
-
-    # Run scons -c as a workaround as a temporary workaround for this
-    # issue: https://github.com/wheeler-microfluidics/base-node-rpc/issues/4
-    sh('scons -c')
-
-    if not boards:
-        boards = options.DEFAULT_ARDUINO_BOARDS
-    for board in boards:
-        if '.' in board:
-            args = 'ARDUINO_BOARD="%s" MCU="%s"' % tuple(board.split('.'))
-        else:
-            args = 'ARDUINO_BOARD="%s"' % board
-        # Compile firmware once for each specified board.
-        sh('scons %s %s' % (scons_flags, args))
-
-
-@task
 @needs('build_arduino_library', 'build_firmware', 'generate_setup', 'minilib',
        'setuptools.command.sdist')
 def sdist():

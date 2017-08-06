@@ -7,7 +7,7 @@ from paver.easy import options, path, environment
 
 sys.path.insert(0, '.')
 from base_node_rpc.pavement_base import *
-import version
+from base_node_rpc import version
 
 install_distutils_tasks()
 
@@ -40,7 +40,6 @@ LIB_PROPERTIES.update(OrderedDict([('author', 'Christian Fobel'),
                                    ('category', 'Communication'),
                                    ('architectures', 'avr')]))
 package_name = PROJECT_PREFIX.replace('_', '-')
-print 'package_name', package_name
 
 options(
     rpc_module=rpc_module,

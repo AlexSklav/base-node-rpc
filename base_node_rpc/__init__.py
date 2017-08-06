@@ -1,6 +1,7 @@
 import os
 from collections import OrderedDict
 
+from path_helpers import path
 try:
     from .node import Proxy, I2cProxy, SerialProxy
 except (ImportError, TypeError):
@@ -8,10 +9,12 @@ except (ImportError, TypeError):
     I2cProxy = None
     SerialProxy = None
 
+from .version import getVersion
+
+__version__ = getVersion()
+
 
 def package_path():
-    from path_helpers import path
-
     return path(os.path.dirname(__file__))
 
 
