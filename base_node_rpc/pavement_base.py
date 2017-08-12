@@ -4,9 +4,11 @@ import platform
 import sys
 import warnings
 
-from paver.easy import task, needs, path, sh, cmdopts, options
+from paver.easy import task, needs, path, sh, cmdopts, options, consume_args
 import base_node_rpc
 import path_helpers as ph
+import platformio_helpers as pioh
+import platformio_helpers.develop
 try:
     from arduino_rpc.pavement_base import *
 except ImportError:
@@ -496,8 +498,15 @@ def generate_library_main_header(options):
     '''.strip().format(module_name_upper=module_name.upper()))
 
 
+
 @task
 @needs('setuptools.command.install')
 def install(options):
     """Override install to copy Arduino library to sketch library directory."""
     pass
+
+
+@task
+@needs('generate_all_code')
+def build_firmware():
+    sh('pio run')
