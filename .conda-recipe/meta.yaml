@@ -19,7 +19,7 @@ requirements:
     - pip
     - platformio-framework-arduinoavr
     - platformio-framework-arduinoteensy
-    - platformio-helpers
+    - platformio-helpers >=0.4
     - platformio-tool-avrdude
     - platformio-tool-scons
     - platformio-tool-teensy
@@ -31,7 +31,7 @@ requirements:
   run:
     - arduino-rpc >=1.10
     - python 2.7*
-    - platformio-helpers
+    - platformio-helpers >=0.4
     - platformio-tool-avrdude
     - platformio-tool-scons
     - platformio-tool-teensy
