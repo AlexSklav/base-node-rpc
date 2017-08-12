@@ -503,6 +503,24 @@ def install(options):
 
 
 @task
+@cmdopts(LIB_CMDOPTS, share_with=LIB_GENERATE_TASKS)
+def develop_link(options):
+    import logging; logging.basicConfig(level=logging.INFO)
+
+    pioh.develop.link(working_dir=path('.').realpath(),
+                      package_name=options.package_name)
+
+
+@task
+@cmdopts(LIB_CMDOPTS, share_with=LIB_GENERATE_TASKS)
+def develop_unlink(options):
+    import logging; logging.basicConfig(level=logging.INFO)
+
+    pioh.develop.unlink(working_dir=path('.').realpath(),
+                        package_name=options.package_name)
+
+
+@task
 @needs('generate_all_code')
 def build_firmware():
     sh('pio run')
