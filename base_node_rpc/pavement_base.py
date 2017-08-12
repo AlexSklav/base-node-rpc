@@ -524,3 +524,10 @@ def develop_unlink(options):
 @needs('generate_all_code')
 def build_firmware():
     sh('pio run')
+
+
+@task
+@consume_args
+def upload(args):
+    sh(['pio', 'run', '--target', 'upload', '--target', 'nobuild'] +
+       (list(args) if args else []))
