@@ -155,8 +155,10 @@ class SerialProxyMixin(object):
         '''
         port = kwargs.pop('port', None)
         baudrate = kwargs.pop('baudrate', 115200)
-        settling_time_s = kwargs.pop('settling_time_s', 0)
-        retry_count = kwargs.pop('retry_count', 6)
+
+
+        self._retry_count = kwargs.pop('retry_count', 6)
+        self._settling_time_s = kwargs.pop('settling_time_s', 0)
 
         super(SerialProxyMixin, self).__init__(**kwargs)
 
@@ -164,8 +166,23 @@ class SerialProxyMixin(object):
         # identified.
         self.device_verified = threading.Event()
 
-        self._connect(port=port, baudrate=baudrate,
-                      settling_time_s=settling_time_s, retry_count=retry_count)
+        self._connect(port=port, baudrate=baudrate)
+
+    @property
+    def port(self):
+        try:
+            port = self.serial_thread.protocol.port
+        except Exception:
+            port = None
+        return port
+
+    @property
+    def baudrate(self):
+        try:
+            baudrate = self.serial_thread.protocol.transport.serial.baudrate
+        except Exception:
+            baudrate = None
+        return baudrate
 
     def reconnection_made(self, protocol):
         '''
@@ -180,8 +197,8 @@ class SerialProxyMixin(object):
         '''
         logger.debug('Connection lost `%s`', protocol.port)
 
-    def _connect(self, port=None, baudrate=115200, retry_count=6,
-                 settling_time_s=0):
+    def _connect(self, port=None, baudrate=None, settling_time_s=None,
+                 retry_count=None):
         '''
         Parameters
         ----------
@@ -197,13 +214,37 @@ class SerialProxyMixin(object):
 
             By default, :data:`settling_time_s` is assumed to be zero.
         retry_count : int, optional
+
+        If a successful connection is made, those paramters will be used
+        as the new defaults.
         '''
+        if port is None and self.port:
+            port = self.port
+
         if port is None:
             ports = sd.comports().index.tolist()
         elif isinstance(port, types.StringTypes):
             ports = [port]
         else:
             ports = port
+
+        if baudrate is None:
+            try:
+                baudrate = self.baudrate
+            except Exception:
+                baudrate = 115200
+
+        if settling_time_s is None:
+            try:
+                settling_time_s = self._settling_time_s
+            except Exception:
+                settling_time_s = 0
+
+        if retry_count is None:
+	    try:
+                retry_count = self._retry_count
+            except Exception:
+                retry_count = 6
 
         parent = self
 
