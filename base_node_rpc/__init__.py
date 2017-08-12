@@ -2,16 +2,17 @@ import os
 from collections import OrderedDict
 
 from path_helpers import path
+
+from .version import getVersion
+
+__version__ = getVersion()
+
 try:
     from .node import Proxy, I2cProxy, SerialProxy
 except (ImportError, TypeError):
     Proxy = None
     I2cProxy = None
     SerialProxy = None
-
-from .version import getVersion
-
-__version__ = getVersion()
 
 
 def package_path():

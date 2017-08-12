@@ -24,7 +24,6 @@ logger = logging.getLogger(__name__)
 
 class ProxyBase(object):
     host_package_name = None
-    __host_software_version__ = __version__
 
     def __init__(self, buffer_bounds_check=True, high_water_mark=10,
                  timeout_s=10):
@@ -36,7 +35,13 @@ class ProxyBase(object):
 
     @property
     def host_software_version(self):
-        return pkg_resources.parse_version(self.__host_software_version__)
+        # Get host software version from the module's __version__ attribute
+        # (see PEP 396[1]).
+        #
+        # [1]: https://www.python.org/dev/peps/pep-0396/
+        exec('from %s import __version__ as host_version' % 
+             self.__module__.split('.')[0])
+        return pkg_resources.parse_version(host_version)
 
     @property
     def remote_software_version(self):
