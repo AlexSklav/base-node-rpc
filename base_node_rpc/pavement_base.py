@@ -79,7 +79,6 @@ def get_base_classes_and_headers(options, lib_dir, sketch_dir):
     '''
     from . import get_lib_directory
 
-    package_name = options.PROPERTIES['package_name']
     module_name = _get_module_name(options.PROPERTIES)
     base_classes = getattr(options, 'base_classes', DEFAULT_BASE_CLASSES)
     rpc_classes = getattr(options, 'rpc_classes', [module_name + '::Node'])
@@ -143,7 +142,6 @@ def generate_validate_header(py_proto_module_name, sketch_dir):
 
     lib_dir = get_lib_directory()
     if hasattr(mod, c_protobuf_struct_name):
-        package_name = options.PROPERTIES['package_name']
         module_name = _get_module_name(options.PROPERTIES)
         input_classes, input_headers = get_base_classes_and_headers(options,
                                                                     lib_dir,
@@ -217,7 +215,6 @@ def generate_command_processor_header(options):
     import c_array_defs
     import jinja2
 
-    package_name = options.PROPERTIES['package_name']
     module_name = _get_module_name(options.PROPERTIES)
     sketch_dir = options.rpc_module.get_sketch_directory()
     lib_dir = base_node_rpc.get_lib_directory()
@@ -292,7 +289,6 @@ def generate_python_code(options):
     from arduino_rpc.rpc_data_frame import get_python_code
     import c_array_defs
 
-    package_name = options.PROPERTIES['package_name']
     module_name = _get_module_name(options.PROPERTIES)
     sketch_dir = options.rpc_module.get_sketch_directory()
     lib_dir = base_node_rpc.get_lib_directory()
@@ -355,7 +351,6 @@ def generate_protobuf_c_code(options):
         else:
             kwargs = {}
 
-        package_name = options.PROPERTIES['package_name']
         module_name = _get_module_name(options.PROPERTIES)
         project_lib_dir = verify_library_directory(options)
         arduino_src_dir = project_lib_dir.joinpath('src', project_lib_dir.name)
@@ -439,7 +434,8 @@ def init_config():
 
     if not output_path.isfile() or overwrite:
         output = jinja2.Template(template).render(package=
-                                                  options.PROPERTIES['package_name'])
+                                                  options
+                                                  .PROPERTIES['package_name'])
         output_path.write_bytes(output)
     else:
         raise IOError('Output path exists.  Use `overwrite` to force '
