@@ -4,9 +4,11 @@ import platform
 import sys
 import warnings
 
-from paver.easy import task, needs, path, sh, cmdopts, options
+from paver.easy import task, needs, path, sh, cmdopts, options, consume_args
 import base_node_rpc
 import path_helpers as ph
+import platformio_helpers as pioh
+import platformio_helpers.develop
 try:
     from arduino_rpc.pavement_base import *
 except ImportError:
@@ -77,7 +79,6 @@ def get_base_classes_and_headers(options, lib_dir, sketch_dir):
     '''
     from . import get_lib_directory
 
-    package_name = options.PROPERTIES['package_name']
     module_name = _get_module_name(options.PROPERTIES)
     base_classes = getattr(options, 'base_classes', DEFAULT_BASE_CLASSES)
     rpc_classes = getattr(options, 'rpc_classes', [module_name + '::Node'])
@@ -141,7 +142,6 @@ def generate_validate_header(py_proto_module_name, sketch_dir):
 
     lib_dir = get_lib_directory()
     if hasattr(mod, c_protobuf_struct_name):
-        package_name = options.PROPERTIES['package_name']
         module_name = _get_module_name(options.PROPERTIES)
         input_classes, input_headers = get_base_classes_and_headers(options,
                                                                     lib_dir,
@@ -215,7 +215,6 @@ def generate_command_processor_header(options):
     import c_array_defs
     import jinja2
 
-    package_name = options.PROPERTIES['package_name']
     module_name = _get_module_name(options.PROPERTIES)
     sketch_dir = options.rpc_module.get_sketch_directory()
     lib_dir = base_node_rpc.get_lib_directory()
@@ -290,7 +289,6 @@ def generate_python_code(options):
     from arduino_rpc.rpc_data_frame import get_python_code
     import c_array_defs
 
-    package_name = options.PROPERTIES['package_name']
     module_name = _get_module_name(options.PROPERTIES)
     sketch_dir = options.rpc_module.get_sketch_directory()
     lib_dir = base_node_rpc.get_lib_directory()
@@ -353,7 +351,6 @@ def generate_protobuf_c_code(options):
         else:
             kwargs = {}
 
-        package_name = options.PROPERTIES['package_name']
         module_name = _get_module_name(options.PROPERTIES)
         project_lib_dir = verify_library_directory(options)
         arduino_src_dir = project_lib_dir.joinpath('src', project_lib_dir.name)
@@ -437,7 +434,8 @@ def init_config():
 
     if not output_path.isfile() or overwrite:
         output = jinja2.Template(template).render(package=
-                                                  options.PROPERTIES['package_name'])
+                                                  options
+                                                  .PROPERTIES['package_name'])
         output_path.write_bytes(output)
     else:
         raise IOError('Output path exists.  Use `overwrite` to force '
@@ -496,8 +494,40 @@ def generate_library_main_header(options):
     '''.strip().format(module_name_upper=module_name.upper()))
 
 
+
 @task
 @needs('setuptools.command.install')
 def install(options):
     """Override install to copy Arduino library to sketch library directory."""
     pass
+
+
+@task
+@cmdopts(LIB_CMDOPTS, share_with=LIB_GENERATE_TASKS)
+def develop_link(options):
+    import logging; logging.basicConfig(level=logging.INFO)
+
+    pioh.develop.link(working_dir=path('.').realpath(),
+                      package_name=options.package_name)
+
+
+@task
+@cmdopts(LIB_CMDOPTS, share_with=LIB_GENERATE_TASKS)
+def develop_unlink(options):
+    import logging; logging.basicConfig(level=logging.INFO)
+
+    pioh.develop.unlink(working_dir=path('.').realpath(),
+                        package_name=options.package_name)
+
+
+@task
+@needs('generate_all_code')
+def build_firmware():
+    sh('pio run')
+
+
+@task
+@consume_args
+def upload(args):
+    sh(['pio', 'run', '--target', 'upload', '--target', 'nobuild'] +
+       (list(args) if args else []))

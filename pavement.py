@@ -2,8 +2,8 @@ from collections import OrderedDict
 import sys
 from importlib import import_module
 
-from paver.setuputils import setup, install_distutils_tasks
-from paver.easy import options, path, environment
+from paver.setuputils import install_distutils_tasks
+from paver.easy import options
 
 sys.path.insert(0, '.')
 from base_node_rpc.pavement_base import *
@@ -58,15 +58,3 @@ options(
                # Install data listed in `MANIFEST.in`
                include_package_data=True,
                packages=[str(PROJECT_PREFIX)]))
-
-
-@task
-@needs('generate_all_code')
-def build_firmware():
-    sh('pio run')
-
-
-@task
-@needs('build_firmware')
-def upload():
-    sh('pio run --target upload --target nobuild')
