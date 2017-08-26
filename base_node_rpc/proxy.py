@@ -156,10 +156,10 @@ class SerialProxyMixin(object):
         port = kwargs.pop('port', None)
         baudrate = kwargs.pop('baudrate', 115200)
 
-
         self._retry_count = kwargs.pop('retry_count', 6)
         self._settling_time_s = kwargs.pop('settling_time_s', 0)
 
+        self.serial_thread = None
         super(SerialProxyMixin, self).__init__(**kwargs)
 
         # Event to indicate that device has been connected to and correctly
