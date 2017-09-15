@@ -71,17 +71,20 @@ class PacketQueueManager(object):
 
         for c in data:
             result = self._packet_parser.parse(np.fromstring(c, dtype='uint8'))
-            if result != False:
+            if result is not False:
                 # A full packet has been parsed.
                 packet_str = np.fromstring(result.tostring(), dtype='uint8')
                 # Add parsed packet to list of packets parsed during this
                 # method call.
-                packets.append((datetime.now(), cPacketParser().parse(packet_str)))
-                # Reset the state of the packet parser to prepare for next packet.
+                packets.append((datetime.now(),
+                                cPacketParser().parse(packet_str)))
+                # Reset the state of the packet parser to prepare for next
+                # packet.
                 self._packet_parser.reset()
             elif self._packet_parser.error:
                 # A parsing error occurred.
-                # Reset the state of the packet parser to prepare for next packet.
+                # Reset the state of the packet parser to prepare for next
+                # packet.
                 self._packet_parser.reset()
 
         # Filter packets parsed during this method call and queue according to

@@ -1,6 +1,5 @@
 from collections import OrderedDict
 import Queue
-import datetime
 import logging
 import pkg_resources
 import sys
@@ -14,7 +13,6 @@ import serial
 import serial_device as sd
 import serial_device.threaded
 import serial_device.or_event
-import path_helpers as ph
 
 from .queue import PacketQueueManager
 from . import __version__
@@ -29,8 +27,8 @@ class ProxyBase(object):
                  timeout_s=10):
         self._buffer_bounds_check = buffer_bounds_check
         self._buffer_size = None
-        self._packet_queue_manager = PacketQueueManager(high_water_mark=
-                                                        high_water_mark)
+        self._packet_queue_manager = \
+            PacketQueueManager(high_water_mark=high_water_mark)
         self._timeout_s = 10
 
     @property
@@ -39,7 +37,7 @@ class ProxyBase(object):
         # (see PEP 396[1]).
         #
         # [1]: https://www.python.org/dev/peps/pep-0396/
-        exec('from %s import __version__ as host_version' % 
+        exec('from %s import __version__ as host_version' %
              self.__module__.split('.')[0])
         return pkg_resources.parse_version(host_version)
 
@@ -77,12 +75,13 @@ class ProxyBase(object):
     @property
     def properties(self):
         import pandas as pd
+
         properties = OrderedDict([(k, getattr(self, k)().tostring())
-                                      for k in ['base_node_software_version',
-                                                'package_name', 'display_name',
-                                                'manufacturer', 'url',
-                                                'software_version']
-                                      if hasattr(self, k)])
+                                  for k in ['base_node_software_version',
+                                            'package_name', 'display_name',
+                                            'manufacturer', 'url',
+                                            'software_version']
+                                  if hasattr(self, k)])
         return pd.Series(properties, dtype=object)
 
     @property
@@ -241,7 +240,7 @@ class SerialProxyMixin(object):
                 settling_time_s = 0
 
         if retry_count is None:
-	    try:
+            try:
                 retry_count = self._retry_count
             except Exception:
                 retry_count = 6
@@ -297,7 +296,8 @@ class SerialProxyMixin(object):
                 except IOError:
                     logger.debug('Connection unsuccessful on port %s after %d '
                                  'attempts.', port, i + 1)
-                    if i >= retry_count - 1: break
+                    if i >= retry_count - 1:
+                        break
                     self.terminate()
                     continue
                 try:
@@ -310,14 +310,14 @@ class SerialProxyMixin(object):
                                     device_package_name, port)
                         self.device_verified.set()
                         return
-                    else: # not the device we're looking for
+                    else:  # not the device we're looking for
                         logger.info('Package name of device (%s) on port (%s)'
                                     ' does not match package name (%s)',
                                     device_package_name, port,
                                     self.host_package_name)
                         self.terminate()
                         break
-                except:
+                except Exception:
                     # There was an exception, so free the serial port.
                     logger.debug('Exception occurred while querying '
                                  'properties on port %s.', port, exc_info=True)
@@ -377,8 +377,10 @@ class ConfigMixinBase(object):
         try:
             fv = resolve_field_values(self._config_pb,
                                       set_default=True).set_index(['full_name'])
-            return pd.Series(OrderedDict([(k, PYTYPE_MAP[v.field_desc.type](v.value))
-                                          for k, v in fv.iterrows()]), dtype=object)
+            return pd.Series(OrderedDict([(k, PYTYPE_MAP[v.field_desc
+                                                         .type](v.value))
+                                          for k, v in fv.iterrows()]),
+                             dtype=object)
         except ValueError:
             return pd.Series()
 
@@ -455,13 +457,15 @@ class StateMixinBase(object):
         import pandas as pd
 
         try:
-            fv = resolve_field_values(self._state_pb,
-                                      set_default=True).set_index(['full_name'])
-            return pd.Series(OrderedDict([(k, PYTYPE_MAP[v.field_desc.type](v.value))
-                                          for k, v in fv.iterrows()]), dtype=object)
+            fv = (resolve_field_values(self._state_pb,
+                                       set_default=True)
+                  .set_index(['full_name']))
+            return pd.Series(OrderedDict([(k, PYTYPE_MAP[v.field_desc
+                                                         .type](v.value))
+                                          for k, v in fv.iterrows()]),
+                             dtype=object)
         except ValueError:
             return pd.Series()
-
 
     @state.setter
     def state(self, value):
