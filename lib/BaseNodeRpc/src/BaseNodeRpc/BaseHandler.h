@@ -1,7 +1,14 @@
 #ifndef ___BASE_HANDLER__H___
 #define ___BASE_HANDLER__H___
 
-#include <ArduinoRpc/CommandPacketHandler.h>
+#include <string.h>
+
+#include <Packet.h>
+
+
+#if defined(DEVICE_ID_RESPONSE)
+const char __DEVICE_ID_RESPONSE__[] PROGMEM = DEVICE_ID_RESPONSE;
+#endif
 
 
 namespace base_node_rpc {
@@ -66,13 +73,32 @@ public:
 
   template <typename CommandProcessor>
   UInt8Array process_packet(CommandProcessor &command_processor) {
-    UInt8Array result;
+    UInt8Array result = UInt8Array_init_default();
+
     if (packet_ready()) {
-      // Process request packet using command processor.
-      result = process_packet_with_processor(packet_, command_processor);
-      if (result.data == NULL) { result.length = 0; }
-      // Write response packet.
-      receiver_.write_f_(result);
+      if (packet_.type() == Packet::packet_type::DATA) {
+        // Process request packet using command processor.
+        result = process_packet_with_processor(packet_, command_processor);
+        if (result.data == NULL) { result.length = 0; }
+        // Write response packet.
+        receiver_.write_f_(result);
+#if defined(DEVICE_ID_RESPONSE)
+      } else if (packet_.type() == Packet::packet_type::ID_REQUEST) {
+        /* ID information was requested.
+         *
+         * Write packet containing device
+         *
+         * ..versionadded:: 0.30
+         */
+        // Write response packet.
+        // receiver_.write_f_(UInt8Array data, uint8_t type_=Packet::packet_type::DATA, uint16_t iuid=0)
+        UInt8Array buffer = packet_.buffer();
+        strcpy_P((char *)buffer.data, __DEVICE_ID_RESPONSE__);
+        buffer.length = strlen_P(__DEVICE_ID_RESPONSE__);
+        receiver_.write_f_(buffer, Packet::packet_type::ID_RESPONSE);
+#endif
+      }
+
       // Reset packet state since request may have overwritten packet buffer.
       packet_reset();
     } else {
