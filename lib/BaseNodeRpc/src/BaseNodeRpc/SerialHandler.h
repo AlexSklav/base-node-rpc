@@ -31,7 +31,8 @@ struct serial_write_packet {
     serialize_any(output, to_send.iuid_);
     serialize_any(output, type_);
     if ((to_send.type() == Packet::packet_type::DATA) ||
-        (to_send.type() == Packet::packet_type::STREAM)) {
+        (to_send.type() == Packet::packet_type::STREAM) ||
+        (to_send.type() == Packet::packet_type::ID_RESPONSE)) {
       serialize_any(output, static_cast<uint16_t>(to_send.payload_length_));
       if (to_send.payload_length_ > 0) {
         output.write((stream_byte_type*)to_send.payload_buffer_,
