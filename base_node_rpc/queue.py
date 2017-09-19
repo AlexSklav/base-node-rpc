@@ -30,10 +30,15 @@ class PacketQueueManager(object):
 
             **TODO** Add configurable policy to keep either newest or oldest
             packets after :attr:`high_water_mark` is reached.
+
+    .. versionchanged:: 0.30
+        Add queue for :attr:`nadamq.NadaMq.PACKET_TYPES.ID_RESPONSE` packets.
+
+        See :module:`nadamq` release notes for version 0.13.
     '''
     def __init__(self, high_water_mark=None):
         self._packet_parser = cPacketParser()
-        packet_types = ['data', 'ack', 'stream']
+        packet_types = ['data', 'ack', 'stream', 'id_response']
         self.packet_queues = pd.Series([Queue() for t in packet_types],
                                        index=packet_types)
         self.high_water_mark = high_water_mark
@@ -62,6 +67,10 @@ class PacketQueueManager(object):
         For each complete packet contained in the parsed data (or a packet
         started on previous read that is completed), push the packet on a queue
         according to the type of packet: ``data``, ``ack``, or ``stream``.
+
+        .. versionchanged:: 0.30
+            Add handling for :attr:`nadamq.NadaMq.PACKET_TYPES.ID_RESPONSE`
+            packets.
 
         Parameters
         ----------
@@ -96,6 +105,9 @@ class PacketQueueManager(object):
                 self.packet_queues.ack.put((t, p))
             elif ((p.type_ == PACKET_TYPES.STREAM) and
                   (not self.queue_full('stream'))):
+                self.packet_queues.stream.put((t, p))
+            elif ((p.type_ == PACKET_TYPES.ID_RESPONSE) and
+                  (not self.queue_full('id_response'))):
                 self.packet_queues.stream.put((t, p))
 
     def queue_full(self, name):

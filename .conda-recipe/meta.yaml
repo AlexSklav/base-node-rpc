@@ -15,6 +15,8 @@ requirements:
   build:
     - arduino-rpc >=1.10
     - future
+    # .. versionadded:: 0.30
+    - nadamq >=0.13
     - paver
     - pip
     - platformio-framework-arduinoavr
@@ -30,6 +32,8 @@ requirements:
 
   run:
     - arduino-rpc >=1.10
+    # .. versionadded:: 0.30
+    - nadamq >=0.13
     - python 2.7*
     - platformio-helpers >=0.4
     - platformio-tool-avrdude
