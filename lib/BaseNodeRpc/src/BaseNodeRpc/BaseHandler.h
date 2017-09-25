@@ -71,6 +71,36 @@ public:
     return output;
   }
 
+#if defined(DEVICE_ID_RESPONSE)
+  void write_device_id_response(UInt8Array buffer) {
+    /*
+     * Write packet containing device identifier.
+     *
+     * ..versionadded:: 0.31
+     *
+     * Parameters
+     * ----------
+     * buffer : UInt8Array
+     *     Buffer to temporarily store identifier string.
+     */
+    // Write response packet.
+    strcpy_P((char *)buffer.data, __DEVICE_ID_RESPONSE__);
+    buffer.length = strlen_P(__DEVICE_ID_RESPONSE__);
+    receiver_.write_f_(buffer, Packet::packet_type::ID_RESPONSE);
+  }
+
+  void write_device_id_response() {
+    /*
+     * Write packet containing device identifier.
+     *
+     * Use packet buffer to temporarily store identifier string.
+     *
+     * ..versionadded:: 0.31
+     */
+    write_device_id_response(packet_.buffer());
+  }
+#endif
+
   template <typename CommandProcessor>
   UInt8Array process_packet(CommandProcessor &command_processor) {
     UInt8Array result = UInt8Array_init_default();
@@ -86,16 +116,12 @@ public:
       } else if (packet_.type() == Packet::packet_type::ID_REQUEST) {
         /* ID information was requested.
          *
-         * Write packet containing device
-         *
          * ..versionadded:: 0.30
+         *
+         * ..versionchanged:: 0.31
+         *     Use ``write_device_id_response`` to write device identifier.
          */
-        // Write response packet.
-        // receiver_.write_f_(UInt8Array data, uint8_t type_=Packet::packet_type::DATA, uint16_t iuid=0)
-        UInt8Array buffer = packet_.buffer();
-        strcpy_P((char *)buffer.data, __DEVICE_ID_RESPONSE__);
-        buffer.length = strlen_P(__DEVICE_ID_RESPONSE__);
-        receiver_.write_f_(buffer, Packet::packet_type::ID_RESPONSE);
+        write_device_id_response();
 #endif
       }
 
