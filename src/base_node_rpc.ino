@@ -23,8 +23,15 @@ void serialEvent() { node_obj.serial_handler_.receiver()(Serial.available()); }
 
 
 void setup() {
+  /* ..versionchanged:: 0.31
+   *     Notify device identifier after setup is completed.
+   */
   node_obj.begin();
   Wire.onReceive(i2c_receive_event);
+#if defined(DEVICE_ID_RESPONSE)
+  // Notify device identifier
+  node_obj.serial_handler_.write_device_id_response();
+#endif
 }
 
 
