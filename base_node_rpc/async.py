@@ -15,6 +15,10 @@ logger = logging.getLogger(__name__)
 ID_REQUEST = cPacket(type_=PACKET_TYPES.ID_REQUEST).tostring()
 
 
+class ParseError(Exception):
+    pass
+
+
 @asyncio.coroutine
 def read_packet(serial_):
     '''
@@ -38,6 +42,9 @@ def read_packet(serial_):
     while result is False:
         character = yield asyncio.From(serial_.read(8 << 10))
         result = parser.parse(np.fromstring(character, dtype='uint8'))
+        if parser.error:
+            # Error parsing packet.
+            raise ParseError('Error parsing packet.')
     raise asyncio.Return(result)
 
 
