@@ -1,3 +1,6 @@
+'''
+.. versionadded:: v0.33
+'''
 import itertools as it
 import struct
 import time
