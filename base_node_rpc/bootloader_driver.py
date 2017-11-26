@@ -181,6 +181,17 @@ class TwiBootloader(object):
 
             Delay is increased exponentially between operations from one
             attempt to the next.
+
+        .. versionchanged:: 0.34
+            Prior to version 0.34, if a page write failed while writing
+            firmware to flash memory, an exception was raised immeidately.
+            This approach is problematic, as it leaves the flash memory in a
+            non-deterministic state which may prevent, for example, returning
+            control to the bootloader.
+
+            As of version 0.34, retry failed page writes up to 10 times,
+            increasing the delay between operations exponentially from one
+            attempt to the next.
         '''
         chip_info = self.read_chip_info()
 
