@@ -156,7 +156,7 @@ class TwiBootloader(object):
         self.proxy.i2c_write(self.bootloader_address, [0x02, 0x02, addrh,
                                                        addrl] + data)
 
-    def write_firmware(self, firmware_path):
+    def write_firmware(self, firmware_path, verify=True, delay_s=0.02):
         '''
         Write `Intel HEX file`__ and split into pages.
 
@@ -166,26 +166,61 @@ class TwiBootloader(object):
         ----------
         firmware_path : str
             Path of Intel HEX file to read.
-        page_size : int
-            Size of each page.
+        verify : bool, optional
+            If ``True``, verify each page after it is written.
+        delay_s : float, optional
+            Time to wait between each write/read operation.
+
+            This delay allows for operation to complete before triggering I2C
+            next call.
+
+        Raises
+        ------
+        IOError
+            If a flash page write fails after 10 retry attempts.
+
+            Delay is increased exponentially between operations from one
+            attempt to the next.
         '''
         chip_info = self.read_chip_info()
 
         pages = load_pages(firmware_path, chip_info['page_size'])
 
-        for i, page_i in enumerate(pages):
-            print 'Write page: %4d/%d     \r' % (i + 1, len(pages)),
-            self.write_flash(i * chip_info['page_size'], page_i)
-            # Delay to allow bootloader to finish writing to flash.
-            time.sleep(.01)
+        # At most, wait 100x the specified nominal delay during retries of
+        # failed page writes.
+        max_delay = max(1., 100. * delay_s)
+        # Retry failed page writes up to 10 times, increasing the delay between
+        # operations exponentially from one attempt to the next.
+        delay_durations = np.logspace(np.log(delay_s) / np.log(10),
+                                      np.log(max_delay) / np.log(10), num=10,
+                                      base=10)
 
-            print 'Verify page: %4d/%d    \r' % (i + 1, len(pages)),
-            # Verify written page.
-            verify_data_i = self.read_flash(i * chip_info['page_size'],
-                                            chip_info['page_size'])
-            assert((verify_data_i == page_i).all())
-            # Delay to allow bootloader to finish processing flash read.
-            time.sleep(.01)
+        for i, page_i in enumerate(pages):
+            # If `verify` is `True`, retry failed page writes up to 10 times.
+            for delay_j in delay_durations:
+                print 'Write page: %4d/%d     \r' % (i + 1, len(pages)),
+                self.write_flash(i * chip_info['page_size'], page_i)
+                # Delay to allow bootloader to finish writing to flash.
+                time.sleep(delay_j)
+
+                if not verify:
+                    break
+                print 'Verify page: %4d/%d    \r' % (i + 1, len(pages)),
+                # Verify written page.
+                verify_data_i = self.read_flash(i * chip_info['page_size'],
+                                                chip_info['page_size'])
+                # Delay to allow bootloader to finish processing flash read.
+                time.sleep(delay_j)
+                try:
+                    if (verify_data_i == page_i).all():
+                        # Data page has been verified successfully.
+                        break
+                except AttributeError:
+                    # Data lengths do not match.
+                    pass
+            else:
+                raise IOError('Page write failed to verify for **all** '
+                              'attempted delay durations.')
 
 
 def load_pages(firmware_path, page_size):
