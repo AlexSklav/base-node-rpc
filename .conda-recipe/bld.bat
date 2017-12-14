@@ -4,6 +4,9 @@ md "%PREFIX%"\Library\include\Arduino
 md "%PREFIX%"\Library\bin\platformio\base-node-rpc\uno
 md "%PREFIX%"\Library\bin\platformio\base-node-rpc\pro8MHzatmega328
 md "%PREFIX%"\Library\bin\platformio\base-node-rpc\teensy31
+md "%PREFIX%"\Library\bin\platformio\base-node-rpc\micro
+md "%PREFIX%"\Library\bin\platformio\base-node-rpc\megaADK
+md "%PREFIX%"\Library\bin\platformio\base-node-rpc\megaatmega2560
 endlocal
 
 REM Generate Arduino `library.properties` file
@@ -22,6 +25,9 @@ copy "%SRC_DIR%"\platformio.ini "%PREFIX%"\Library\bin\platformio\base-node-rpc
 copy "%SRC_DIR%"\.pioenvs\uno\firmware.hex "%PREFIX%"\Library\bin\platformio\base-node-rpc\uno\firmware.hex
 copy "%SRC_DIR%"\.pioenvs\pro8MHzatmega328\firmware.hex "%PREFIX%"\Library\bin\platformio\base-node-rpc\pro8MHzatmega328\firmware.hex
 copy "%SRC_DIR%"\.pioenvs\teensy31\firmware.hex "%PREFIX%"\Library\bin\platformio\base-node-rpc\teensy31\firmware.hex
+copy "%SRC_DIR%"\.pioenvs\micro\firmware.hex "%PREFIX%"\Library\bin\platformio\base-node-rpc\micro\firmware.hex
+copy "%SRC_DIR%"\.pioenvs\megaADK\firmware.hex "%PREFIX%"\Library\bin\platformio\base-node-rpc\megaADK\firmware.hex
+copy "%SRC_DIR%"\.pioenvs\megaatmega2560\firmware.hex "%PREFIX%"\Library\bin\platformio\base-node-rpc\megaatmega2560\firmware.hex
 if errorlevel 1 exit 1
 
 REM Generate `setup.py` from `pavement.py` definition.
