@@ -1,7 +1,7 @@
 import argparse
 import sys
 
-import base_node_rpc.version
+import base_node_rpc
 
 
 def parse_args(args=None):
@@ -9,7 +9,7 @@ def parse_args(args=None):
         args = sys.argv[1:]
     parser = argparse.ArgumentParser()
 
-    default_version = base_node_rpc.version.getVersion()
+    default_version = base_node_rpc.__version__
     parser.add_argument('-V', '--version', default=default_version)
     parser.add_argument('arg', nargs='*')
 
