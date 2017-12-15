@@ -7,14 +7,15 @@ from paver.easy import options
 
 sys.path.insert(0, '.')
 from base_node_rpc.pavement_base import *
-from base_node_rpc import version
+import versioneer
+
 
 install_distutils_tasks()
 
 DEFAULT_ARDUINO_BOARDS = ['uno', 'mega2560']
 PROJECT_PREFIX = 'base_node_rpc'
 rpc_module = import_module(PROJECT_PREFIX)
-VERSION = version.getVersion()
+VERSION = versioneer.get_version()
 URL='http://github.com/wheeler-microfluidics/%s.git' % PROJECT_PREFIX
 package_name = PROJECT_PREFIX.replace('_', '-')
 PROPERTIES = OrderedDict([('package_name', package_name),
@@ -48,6 +49,7 @@ options(
     DEFAULT_ARDUINO_BOARDS=DEFAULT_ARDUINO_BOARDS,
     setup=dict(name=package_name,
                version=VERSION,
+               cmdclass=versioneer.get_cmdclass(),
                description=LIB_PROPERTIES['long_description'],
                author='Christian Fobel',
                author_email='christian@fobel.net',

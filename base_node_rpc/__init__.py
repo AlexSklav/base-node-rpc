@@ -3,9 +3,9 @@ from collections import OrderedDict
 
 from path_helpers import path
 
-from .version import getVersion
-
-__version__ = getVersion()
+from ._version import get_versions
+__version__ = get_versions()['version']
+del get_versions
 
 try:
     from .node import Proxy, I2cProxy, SerialProxy
@@ -74,3 +74,7 @@ def get_firmwares():
                                           board_dir.walkfiles('*.hex')])
                         for board_dir in
                         package_path().joinpath('firmware').dirs()])
+
+from ._version import get_versions
+__version__ = get_versions()['version']
+del get_versions
