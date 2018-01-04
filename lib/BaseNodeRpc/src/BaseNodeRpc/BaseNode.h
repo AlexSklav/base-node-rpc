@@ -79,11 +79,12 @@ public:
   void delay_ms(uint16_t ms) { if (ms > 0) { delay(ms); } }
   uint32_t ram_free() { return free_memory(); }
 
-  void pin_mode(uint8_t pin, uint8_t mode) { return pinMode(pin, mode); }
+  void pin_mode(uint8_t pin, uint8_t mode) { pinMode(pin, mode); }
   uint8_t digital_read(uint8_t pin) const { return digitalRead(pin); }
   void digital_write(uint8_t pin, uint8_t value) { digitalWrite(pin, value); }
   uint16_t analog_read(uint8_t pin) const { return analogRead(pin); }
-  void analog_write(uint8_t pin, uint8_t value) { return analogWrite(pin, value); }
+  void analog_write(uint8_t pin, uint8_t value) { analogWrite(pin, value); }
+  void analog_reference(uint8_t type) { analogReference(type); }
 
   uint16_t array_length(UInt8Array array) { return array.length; }
   UInt32Array echo_array(UInt32Array array) { return array; }
