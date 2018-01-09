@@ -121,3 +121,45 @@ def _available_devices(ports, baudrate=9600, timeout=None):
     else:
         df_results = ports
     raise asyncio.Return(df_results)
+
+
+def available_devices(baudrate=9600, ports=None, timeout=None):
+    '''
+    Request list of available serial devices, including device identifier (if
+    available).
+
+    .. note::
+        Synchronous wrapper for :func:`_available_devices`.
+
+    Parameters
+    ----------
+    baudrate : int, optional
+        Baud rate to use for device identifier request.
+
+        **Default: 9600**
+    ports : pd.DataFrame
+        Table of ports to query (in format returned by
+        :func:`serial_device.comports`).
+
+        **Default: all available ports**
+    timeout : float, optional
+        Maximum number of seconds to wait for a response from each serial
+        device.
+
+    Returns
+    -------
+    pd.DataFrame
+        Specified :data:`ports` table updated with ``baudrate``,
+        ``device_name``, and ``device_version`` columns.
+    '''
+    if ports is None:
+        ports = sd.comports(only_available=True)
+    if platform.system() == 'Windows':
+        loop = asyncio.ProactorEventLoop()
+        asyncio.set_event_loop(loop)
+    else:
+        loop = asyncio.get_event_loop()
+
+    return loop.run_until_complete(_available_devices(ports,
+                                                      baudrate=baudrate,
+                                                      timeout=timeout))
