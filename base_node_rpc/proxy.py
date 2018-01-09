@@ -29,7 +29,7 @@ class ProxyBase(object):
         self._buffer_size = None
         self._packet_queue_manager = \
             PacketQueueManager(high_water_mark=high_water_mark)
-        self._timeout_s = 10
+        self._timeout_s = timeout_s
 
     @property
     def host_software_version(self):
