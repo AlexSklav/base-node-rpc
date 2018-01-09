@@ -14,9 +14,12 @@ package:
 requirements:
   build:
     - arduino-rpc >=1.10
+    # .. versionadded:: 0.38
+    - asyncserial >=0.2
     - future
     # .. versionadded:: 0.30
-    - nadamq >=0.13
+    # .. versionchanged:: 0.38
+    - nadamq >=0.14
     - paver
     - pip
     - platformio-framework-arduinoavr
@@ -28,18 +31,28 @@ requirements:
     - platformio-toolchain-atmelavr
     - platformio-toolchain-gccarmnoneeabi
     - python 2.7*
-    - serial-device >=0.8
+    # .. versionchanged:: 0.38
+    - serial-device >=0.9
 
   run:
     - arduino-rpc >=1.10
+    # .. versionadded:: 0.38
+    - asyncserial >=0.2
     # .. versionadded:: 0.30
-    - nadamq >=0.13
+    # .. versionchanged:: 0.38
+    - nadamq >=0.14
     - python 2.7*
     - platformio-helpers >=0.4
     - platformio-tool-avrdude
     - platformio-tool-scons
     - platformio-tool-teensy
-    - serial-device >=0.8
+    # .. versionchanged:: 0.38
+    - serial-device >=0.9
+
+test:
+  imports:
+    - base_node_rpc
+    - base_node_rpc.async
 
 about:
   home: https://github.com/wheeler-microfluidics/base-node-rpc
