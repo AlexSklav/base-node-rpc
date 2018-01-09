@@ -49,6 +49,11 @@ requirements:
     # .. versionchanged:: 0.38
     - serial-device >=0.9
 
+test:
+  imports:
+    - base_node_rpc
+    - base_node_rpc.async
+
 about:
   home: https://github.com/wheeler-microfluidics/base-node-rpc
   license: MIT
