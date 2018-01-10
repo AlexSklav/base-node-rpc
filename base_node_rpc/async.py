@@ -1,13 +1,13 @@
 import logging
 import platform
 
-import asyncserial
-import serial_device as sd
-import trollius as asyncio
-
+from functools import wraps
 from nadamq.NadaMq import cPacket, cPacketParser, PACKET_TYPES
+import asyncserial
 import numpy as np
 import pandas as pd
+import serial_device as sd
+import trollius as asyncio
 
 
 logger = logging.getLogger(__name__)
@@ -49,7 +49,7 @@ def read_packet(serial_):
 
 
 @asyncio.coroutine
-def read_device_id(**kwargs):
+def _read_device_id(**kwargs):
     '''
     Request device identifier from a serial device.
 
@@ -116,8 +116,7 @@ def _available_devices(ports, baudrate=9600, timeout=None):
     if not ports.shape[0]:
         # No ports
         raise asyncio.Return(ports)
-    futures = [read_device_id(port=name_i, baudrate=baudrate,
-                              timeout=timeout)
+    futures = [_read_device_id(port=name_i, baudrate=baudrate, timeout=timeout)
                for name_i in ports.index]
     done, pending = yield asyncio.From(asyncio.wait(futures))
     results = [task_i.result() for task_i in done
@@ -130,6 +129,27 @@ def _available_devices(ports, baudrate=9600, timeout=None):
     raise asyncio.Return(df_results)
 
 
+def with_loop(func):
+    '''
+    Decorator to run function within an asyncio event loop.
+
+    .. notes::
+        Uses :class:`asyncio.ProactorEventLoop` on Windows to support, e.g.,
+        serial device events.
+    '''
+    @wraps(func)
+    def wrapped(*args, **kwargs):
+        if platform.system() == 'Windows':
+            loop = asyncio.ProactorEventLoop()
+            asyncio.set_event_loop(loop)
+        else:
+            loop = asyncio.get_event_loop()
+
+        return loop.run_until_complete(func(**kwargs))
+    return wrapped
+
+
+@with_loop
 def available_devices(baudrate=9600, ports=None, timeout=None):
     '''
     Request list of available serial devices, including device identifier (if
@@ -161,12 +181,30 @@ def available_devices(baudrate=9600, ports=None, timeout=None):
     '''
     if ports is None:
         ports = sd.comports(only_available=True)
-    if platform.system() == 'Windows':
-        loop = asyncio.ProactorEventLoop()
-        asyncio.set_event_loop(loop)
-    else:
-        loop = asyncio.get_event_loop()
 
-    return loop.run_until_complete(_available_devices(ports,
-                                                      baudrate=baudrate,
-                                                      timeout=timeout))
+    return _available_devices(ports, baudrate=baudrate, timeout=timeout)
+
+
+@with_loop
+def read_device_id(**kwargs):
+    '''
+    Request device identifier from a serial device.
+
+    .. note::
+        Synchronous wrapper for :func:`_read_device_id`.
+
+    Parameters
+    ----------
+    timeout : float, optional
+        Number of seconds to wait for response from serial device.
+    **kwargs
+        Keyword arguments to pass to :class:`asyncserial.AsyncSerial`
+        initialization function.
+
+    Returns
+    -------
+    dict
+        Specified :data:`kwargs` updated with ``device_name`` and
+        ``device_version`` items.
+    '''
+    return _read_device_id(**kwargs)

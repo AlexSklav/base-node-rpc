@@ -15,7 +15,7 @@ import serial_device.threaded
 import serial_device.or_event
 
 from .queue import PacketQueueManager
-from . import __version__, available_devices
+from . import __version__, available_devices, read_device_id
 
 logger = logging.getLogger(__name__)
 

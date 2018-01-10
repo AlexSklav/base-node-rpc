@@ -9,6 +9,8 @@ del get_versions
 
 # .. versionadded:: 0.38
 from .async import available_devices
+# .. versionadded:: 0.39
+from .async import read_device_id
 try:
     from .node import Proxy, I2cProxy, SerialProxy
 except (ImportError, TypeError):
