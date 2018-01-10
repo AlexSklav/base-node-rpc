@@ -15,9 +15,31 @@ import serial_device.threaded
 import serial_device.or_event
 
 from .queue import PacketQueueManager
-from . import __version__
+from . import __version__, available_devices
 
 logger = logging.getLogger(__name__)
+
+
+class DeviceNotFound(Exception):
+    def __init__(self, *args, **kwargs):
+        self.df_comports = kwargs.pop('df_comports', None)
+        super(DeviceNotFound, self).__init__(*args, **kwargs)
+
+
+class MultipleDevicesFound(DeviceNotFound):
+    pass
+
+
+class DeviceVersionMismatch(Exception):
+    def __init__(self, device, port_info):
+        self.device = device
+        self.port_info = port_info
+        super(DeviceVersionMismatch, self).__init__()
+
+    def __str__(self):
+        return ('Device driver version (%s) does not match version reported '
+                'by device (%s).' % (self.device.device_version,
+                                     self.port_info.device_version))
 
 
 class ProxyBase(object):
@@ -154,6 +176,7 @@ class SerialProxyMixin(object):
         '''
         port = kwargs.pop('port', None)
         baudrate = kwargs.pop('baudrate', 115200)
+        self.ignore = kwargs.pop('ignore', None)
 
         self._retry_count = kwargs.pop('retry_count', 6)
         self._settling_time_s = kwargs.pop('settling_time_s', 0)
@@ -197,7 +220,7 @@ class SerialProxyMixin(object):
         logger.debug('Connection lost `%s`', protocol.port)
 
     def _connect(self, port=None, baudrate=None, settling_time_s=None,
-                 retry_count=None):
+                 retry_count=None, ignore=None):
         '''
         Parameters
         ----------
@@ -213,6 +236,19 @@ class SerialProxyMixin(object):
 
             By default, :data:`settling_time_s` is assumed to be zero.
         retry_count : int, optional
+        ignore : bool or list, optional
+            List of non-critical exception types to ignore during
+            initialization.
+
+            This allows, for example:
+
+             - Connecting to a device with a different version.
+
+            If set to ``True``, all optional exception types to ignore during
+            initialization.
+
+            Default is to raise all exceptions encountered during
+            initialization.
 
         If a successful connection is made, those paramters will be used
         as the new defaults.
@@ -220,8 +256,50 @@ class SerialProxyMixin(object):
         if port is None and self.port:
             port = self.port
 
+        if ignore is None and self.ignore:
+            ignore = self.ignore
+        if not ignore:
+            ignore = []
+        elif isinstance(ignore, bool):
+            # If `ignore` is set to `True`, ignore all optional exceptions.
+            ignore = [DeviceVersionMismatch]
+
         if port is None:
-            ports = sd.comports().index.tolist()
+            if hasattr(self, 'device_name'):
+                # Device name specified in base class.
+                # Only return serial ports with matching device name in ``ID_RESPONSE``
+                # packet.
+                df_comports = available_devices(timeout=settling_time_s)
+                if df_comports.shape[0]:
+                    df_comports = df_comports.loc[df_comports.device_name ==
+                                                  self.device_name].copy()
+
+                if not df_comports.shape[0]:
+                    # No devices found with matching name.
+                    raise DeviceNotFound(df_comports)
+                elif df_comports.shape[0] > 1:
+                    # Multiple devices found with matching name.
+                    raise MultipleDevicesFound(df_comports)
+                else:
+                    # Single device found with matching name.
+                    device_port = df_comports.iloc[0]
+                    if hasattr(self,
+                               'device_version') and (device_port
+                                                      .device_version !=
+                                                      self.device_version):
+                        # Mismatch between device driver version and version
+                        # reported by device.
+                        if DeviceVersionMismatch in ignore:
+                            logger.warn('Device driver version (%s) does not '
+                                        'match version reported by device '
+                                        '(%s).', self.device_version,
+                                        device_port.device_version)
+                        else:
+                            raise DeviceVersionMismatch(self, device_port)
+                    ports = [device_port.name]
+            else:
+                # No device name specified in base class.
+                ports = sd.comports(only_available=True).index.tolist()
         elif isinstance(port, types.StringTypes):
             ports = [port]
         else:
