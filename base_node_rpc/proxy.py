@@ -21,25 +21,25 @@ logger = logging.getLogger(__name__)
 
 
 class DeviceNotFound(Exception):
-    def __init__(self, *args, **kwargs):
-        self.df_comports = kwargs.pop('df_comports', None)
-        super(DeviceNotFound, self).__init__(*args, **kwargs)
-
-
-class MultipleDevicesFound(DeviceNotFound):
     pass
 
 
+class MultipleDevicesFound(Exception):
+    def __init__(self, *args, **kwargs):
+        self.df_comports = kwargs.pop('df_comports', None)
+        super(MultipleDevicesFound, self).__init__(*args, **kwargs)
+
+
 class DeviceVersionMismatch(Exception):
-    def __init__(self, device, port_info):
+    def __init__(self, device, device_version):
         self.device = device
-        self.port_info = port_info
+        self.device_version = device_version
         super(DeviceVersionMismatch, self).__init__()
 
     def __str__(self):
         return ('Device driver version (%s) does not match version reported '
                 'by device (%s).' % (self.device.device_version,
-                                     self.port_info.device_version))
+                                     self.device_version))
 
 
 class ProxyBase(object):
@@ -273,33 +273,16 @@ class SerialProxyMixin(object):
                 if df_comports.shape[0]:
                     df_comports = df_comports.loc[df_comports.device_name ==
                                                   self.device_name].copy()
-
                 if not df_comports.shape[0]:
                     # No devices found with matching name.
-                    raise DeviceNotFound(df_comports)
+                    raise DeviceNotFound()
                 elif df_comports.shape[0] > 1:
                     # Multiple devices found with matching name.
                     raise MultipleDevicesFound(df_comports)
-                else:
-                    # Single device found with matching name.
-                    device_port = df_comports.iloc[0]
-                    if hasattr(self,
-                               'device_version') and (device_port
-                                                      .device_version !=
-                                                      self.device_version):
-                        # Mismatch between device driver version and version
-                        # reported by device.
-                        if DeviceVersionMismatch in ignore:
-                            logger.warn('Device driver version (%s) does not '
-                                        'match version reported by device '
-                                        '(%s).', self.device_version,
-                                        device_port.device_version)
-                        else:
-                            raise DeviceVersionMismatch(self, device_port)
-                    ports = [device_port.name]
             else:
                 # No device name specified in base class.
-                ports = sd.comports(only_available=True).index.tolist()
+                df_comports = sd.comports(only_available=True)
+            ports = df_comports.tolist()
         elif isinstance(port, types.StringTypes):
             ports = [port]
         else:
@@ -343,6 +326,25 @@ class SerialProxyMixin(object):
                 parent.connection_lost(self, exception)
 
         for port in ports:
+            # Read device ID.
+            device_id = read_device_id(port=port, timeout=5.)
+            if device_id is not None and hasattr(self, 'device_name'):
+                if device_id.get('device_name') != self.device_name:
+                    # No devices found with matching name.
+                    raise DeviceNotFound()
+                elif not (device_id.get('device_version') ==
+                          getattr(self, 'device_version', None)):
+                    # Mismatch between device driver version and version
+                    # reported by device.
+                    if DeviceVersionMismatch in ignore:
+                        logger.warn('Device driver version (%s) does not '
+                                    'match version reported by device '
+                                    '(%s).', self.device_version,
+                                    device_id.get('device_version'))
+                    else:
+                        raise DeviceVersionMismatch(self, device_id
+                                                    .get('device_version'))
+
             for i in xrange(retry_count):
                 try:
                     logger.debug('Attempt to connect to device on port %s '
