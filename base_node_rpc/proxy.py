@@ -177,6 +177,8 @@ def serial_ports(device_name=None, timeout=5.):
 
         If no device name was specified, returns all serial ports that are not
         busy.
+
+    .. versionadded:: 0.40
     '''
     if device_name is None:
         # No device name specified in base class.
@@ -219,6 +221,18 @@ class SerialProxyMixin(object):
 
             By default, :data:`settling_time_s` is assumed to be zero.
         retry_count : int, optional
+            Deprecated as of 0.40.
+
+        .. versionchanged:: 0.40
+            Deprecate :data:`retry_count` arg.
+
+            Use :data:`settling_time_s` as timeout for async calls.  Prior to
+            version 0.40, this async calls would block indefinitely if device
+            didn't respond with an :data:`ID_RESPONSE` packet.
+
+            Test identity using :func:`read_device_id` function, with fallback
+            to :data:`self.properties['package_name']` for devices that do not
+            respond with :data:`ID_RESPONSE` packet.
         '''
         port = kwargs.pop('port', None)
         baudrate = kwargs.pop('baudrate', 115200)
@@ -301,8 +315,18 @@ class SerialProxyMixin(object):
             Default is to raise all exceptions encountered during
             initialization.
 
-        If a successful connection is made, those paramters will be used
-        as the new defaults.
+        Parameters are saved as defaults upon successful connection.
+
+        .. versionchanged:: 0.40
+            Deprecate :data:`retry_count` arg.
+
+            Use :data:`settling_time_s` as timeout for async calls.  Prior to
+            version 0.40, this async calls would block indefinitely if device
+            didn't respond with an :data:`ID_RESPONSE` packet.
+
+            Test identity using :func:`read_device_id` function, with fallback
+            to :data:`self.properties['package_name']` for devices that do not
+            respond with :data:`ID_RESPONSE` packet.
         '''
         if port is None and self.port:
             port = self.port
