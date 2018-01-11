@@ -154,6 +154,51 @@ class I2cProxyMixin(object):
         pass
 
 
+def serial_ports(device_name=None, timeout=5.):
+    '''
+    Parameters
+    ----------
+    device_name : str, optional
+        Device name as reported by :data:`ID_RESPONSE` packet.
+
+        If ``None``, return all serial ports that are not busy.
+    timeout : float, optional
+        Maximum number of seconds to wait for a response from each serial
+        device.
+
+        If ``None``, call will block until response is received from each
+        serial port.
+
+    Returns
+    -------
+    pandas.DataFrame
+        Table of serial ports that match the specified :data:`device_name`.
+
+        If no device name was specified, returns all serial ports that are not
+        busy.
+    '''
+    if device_name is None:
+        # No device name specified in base class.
+        return sd.comports(only_available=True)
+    else:
+        # Device name specified in base class.
+        # Only return serial ports with matching device name in ``ID_RESPONSE``
+        # packet.
+        df_comports = available_devices(timeout=timeout)
+        if not 'device_name' in df_comports:
+            # No devices found with matching name.
+            raise DeviceNotFound('No named devices found.')
+        elif df_comports.shape[0]:
+            df_comports = df_comports.loc[df_comports.device_name ==
+                                          device_name].copy()
+        if not df_comports.shape[0]:
+            raise DeviceNotFound('No devices found with matching name.')
+        elif df_comports.shape[0] > 1:
+            # Multiple devices found with matching name.
+            raise MultipleDevicesFound(df_comports)
+        return df_comports
+
+
 class SerialProxyMixin(object):
     def __init__(self, **kwargs):
         '''
