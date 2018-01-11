@@ -6,6 +6,7 @@ import sys
 import threading
 import time
 import types
+import warnings
 
 from arduino_rpc.protobuf import resolve_field_values, PYTYPE_MAP
 from nadamq.NadaMq import cPacket, PACKET_TYPES
@@ -221,9 +222,13 @@ class SerialProxyMixin(object):
         '''
         port = kwargs.pop('port', None)
         baudrate = kwargs.pop('baudrate', 115200)
-        self.ignore = kwargs.pop('ignore', None)
 
-        self._retry_count = kwargs.pop('retry_count', 6)
+        if 'retry_count' in kwargs:
+            warnings.warn('`retry_count` arg is deprecated and will be removed'
+                          ' in future releases.', DeprecationWarning)
+            kwargs.pop('retry_count', None)
+
+        self.ignore = kwargs.pop('ignore', None)
         self._settling_time_s = kwargs.pop('settling_time_s', 0)
 
         self.serial_thread = None
@@ -281,6 +286,7 @@ class SerialProxyMixin(object):
 
             By default, :data:`settling_time_s` is assumed to be zero.
         retry_count : int, optional
+            Deprecated.
         ignore : bool or list, optional
             List of non-critical exception types to ignore during
             initialization.
@@ -300,6 +306,11 @@ class SerialProxyMixin(object):
         '''
         if port is None and self.port:
             port = self.port
+        if settling_time_s is None:
+            try:
+                settling_time_s = self._settling_time_s
+            except Exception:
+                settling_time_s = 0
 
         if ignore is None and self.ignore:
             ignore = self.ignore
@@ -309,47 +320,15 @@ class SerialProxyMixin(object):
             # If `ignore` is set to `True`, ignore all optional exceptions.
             ignore = [DeviceVersionMismatch]
 
-        if port is None:
-            if hasattr(self, 'device_name'):
-                # Device name specified in base class.
-                # Only return serial ports with matching device name in ``ID_RESPONSE``
-                # packet.
-                df_comports = available_devices(timeout=settling_time_s)
-                if df_comports.shape[0]:
-                    df_comports = df_comports.loc[df_comports.device_name ==
-                                                  self.device_name].copy()
-                if not df_comports.shape[0]:
-                    # No devices found with matching name.
-                    raise DeviceNotFound()
-                elif df_comports.shape[0] > 1:
-                    # Multiple devices found with matching name.
-                    raise MultipleDevicesFound(df_comports)
-            else:
-                # No device name specified in base class.
-                df_comports = sd.comports(only_available=True)
-            ports = df_comports.tolist()
-        elif isinstance(port, types.StringTypes):
-            ports = [port]
-        else:
-            ports = port
-
         if baudrate is None:
             try:
                 baudrate = self.baudrate
             except Exception:
                 baudrate = 115200
 
-        if settling_time_s is None:
-            try:
-                settling_time_s = self._settling_time_s
-            except Exception:
-                settling_time_s = 0
-
-        if retry_count is None:
-            try:
-                retry_count = self._retry_count
-            except Exception:
-                retry_count = 6
+        if retry_count is not None:
+            warnings.warn('`retry_count` arg is deprecated and will be removed'
+                          ' in future releases.', DeprecationWarning)
 
         parent = self
 
@@ -370,13 +349,34 @@ class SerialProxyMixin(object):
                 super(PacketProtocol, self).connection_lost(exception)
                 parent.connection_lost(self, exception)
 
-        for port in ports:
+        # Look up device information for all available ports.
+        device_name = getattr(self, 'device_name', None)
+        df_comports = serial_ports(device_name=device_name)
+        if port is None:
+            ports = df_comports.index.tolist()
+        elif isinstance(port, types.StringTypes):
+            # Single port was specified.
+            ports = [port]
+        else:
+            # List of ports was specified.
+            ports = port
+
+        for port_i in ports:
+            if port_i not in df_comports.index:
+                raise DeviceNotFound('No %sdevice available on port %s' %
+                                     (device_name + ' ' if device_name else '',
+                                      port_i))
+
+        for port_i in ports:
             # Read device ID.
-            device_id = read_device_id(port=port, timeout=5.)
-            if device_id is not None and hasattr(self, 'device_name'):
-                if device_id.get('device_name') != self.device_name:
+            device_id = read_device_id(port=port_i, timeout=settling_time_s)
+
+            if device_id is not None and device_name is not None:
+                if device_id.get('device_name') != device_name:
                     # No devices found with matching name.
-                    raise DeviceNotFound()
+                    raise DeviceNotFound('Device `%s` does not match expected '
+                                         'name `%s`' % (device_id,
+                                                        device_name))
                 elif not (device_id.get('device_version') ==
                           getattr(self, 'device_version', None)):
                     # Mismatch between device driver version and version
@@ -390,65 +390,43 @@ class SerialProxyMixin(object):
                         raise DeviceVersionMismatch(self, device_id
                                                     .get('device_version'))
 
-            for i in xrange(retry_count):
-                try:
-                    logger.debug('Attempt to connect to device on port %s '
-                                 '(baudrate=%s)', port, baudrate)
-                    # Launch background thread to:
-                    #
-                    #  - Connect to serial port
-                    #  - Listen for incoming data and parse into packets.
-                    #  - Attempt to reconnect if disconnected.
-                    self.serial_thread = (sd.threaded
-                                          .KeepAliveReader(PacketProtocol,
-                                                           port,
-                                                           baudrate=baudrate)
-                                          .__enter__())
-                    event = sd.or_event.OrEvent(self.serial_thread.closed,
-                                                self.serial_thread.connected)
-                except serial.SerialException:
-                    continue
+            try:
+                logger.debug('Attempt to connect to device on port %s '
+                             '(baudrate=%s)', port_i, baudrate)
+                # Launch background thread to:
+                #
+                #  - Connect to serial port
+                #  - Listen for incoming data and parse into packets.
+                #  - Attempt to reconnect if disconnected.
+                self.serial_thread = (sd.threaded
+                                      .KeepAliveReader(PacketProtocol, port_i,
+                                                       baudrate=baudrate)
+                                      .__enter__())
+                event = sd.or_event.OrEvent(self.serial_thread.closed,
+                                            self.serial_thread.connected)
+            except serial.SerialException:
+                continue
 
-                logger.debug('Wait for connection to port %s', port)
-                event.wait()
-                if self.serial_thread.error.is_set():
-                    raise self.serial_thread.error.exception
+            logger.debug('Wait for connection to port %s', port_i)
+            event.wait()
+            if self.serial_thread.error.is_set():
+                raise self.serial_thread.error.exception
 
-                time.sleep(settling_time_s + .5 * i)
+            time.sleep(settling_time_s)
 
-                try:
-                    self.ram_free()
-                except IOError:
-                    logger.debug('Connection unsuccessful on port %s after %d '
-                                 'attempts.', port, i + 1)
-                    if i >= retry_count - 1:
-                        break
-                    self.terminate()
-                    continue
-                try:
+            try:
+                self.ram_free()
+                if device_id is None:
                     properties = self.properties
-                    device_package_name = properties['package_name']
-                    if (self.host_package_name
-                        is None) or (device_package_name ==
-                                     self.host_package_name):
-                        logger.info('Successfully connected to %s on port %s',
-                                    device_package_name, port)
-                        self.device_verified.set()
-                        return
-                    else:  # not the device we're looking for
-                        logger.info('Package name of device (%s) on port (%s)'
-                                    ' does not match package name (%s)',
-                                    device_package_name, port,
-                                    self.host_package_name)
-                        self.terminate()
-                        break
-                except Exception:
-                    # There was an exception, so free the serial port.
-                    logger.debug('Exception occurred while querying '
-                                 'properties on port %s.', port, exc_info=True)
-                    self.terminate()
-                    raise
+                    device_id = {'device_name': properties['package_name']}
+            except IOError:
+                logger.debug('Connection unsuccessful on port %s' % port_i)
+                continue
 
+            logger.info('Successfully connected to %s on port %s',
+                        device_id['device_name'], port_i)
+            self.device_verified.set()
+            return
         raise IOError('Device not found on any port.')
 
     def terminate(self):
