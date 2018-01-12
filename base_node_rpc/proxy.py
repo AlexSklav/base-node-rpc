@@ -155,7 +155,7 @@ class I2cProxyMixin(object):
         pass
 
 
-def serial_ports(device_name=None, timeout=5.):
+def serial_ports(device_name=None, timeout=5., allow_multiple=False):
     '''
     Parameters
     ----------
@@ -169,6 +169,8 @@ def serial_ports(device_name=None, timeout=5.):
 
         If ``None``, call will block until response is received from each
         serial port.
+    allow_multiple : bool, optional
+        Allow multiple devices with the same name.
 
     Returns
     -------
@@ -179,6 +181,8 @@ def serial_ports(device_name=None, timeout=5.):
         busy.
 
     .. versionadded:: 0.40
+    .. versionchanged:: 0.40.3
+        Add :data:`allow_multiple` argument.
     '''
     if device_name is None:
         # No device name specified in base class.
@@ -196,7 +200,7 @@ def serial_ports(device_name=None, timeout=5.):
                                           device_name].copy()
         if not df_comports.shape[0]:
             raise DeviceNotFound('No devices found with matching name.')
-        elif df_comports.shape[0] > 1:
+        elif df_comports.shape[0] > 1 and not allow_multiple:
             # Multiple devices found with matching name.
             raise MultipleDevicesFound(df_comports)
         return df_comports
@@ -330,6 +334,9 @@ class SerialProxyMixin(object):
         .. versionchanged:: 0.40.2
             Use :data:`settling_time_s` as timeout when querying available
             devices.
+        .. versionchanged:: 0.40.3
+            Fix case where single :data:`port` is specified explicitly with
+            multiple devices available.
         '''
         if port is None and self.port:
             port = self.port
@@ -378,16 +385,21 @@ class SerialProxyMixin(object):
 
         # Look up device information for all available ports.
         device_name = getattr(self, 'device_name', None)
-        df_comports = serial_ports(device_name=device_name,
-                                   timeout=settling_time_s)
-        if port is None:
-            ports = df_comports.index.tolist()
-        elif isinstance(port, types.StringTypes):
-            # Single port was specified.
+
+        if isinstance(port, types.StringTypes):
+            # Single port was explicitly specified.
+            df_comports = serial_ports(device_name=device_name,
+                                       timeout=settling_time_s,
+                                       allow_multiple=True)
             ports = [port]
         else:
-            # List of ports was specified.
-            ports = port
+            df_comports = serial_ports(device_name=device_name,
+                                       timeout=settling_time_s)
+            if port is None:
+                ports = df_comports.index.tolist()
+            else:
+                # List of ports was specified.
+                ports = port
 
         for port_i in ports:
             if port_i not in df_comports.index:
