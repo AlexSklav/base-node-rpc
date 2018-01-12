@@ -327,6 +327,9 @@ class SerialProxyMixin(object):
             Test identity using :func:`read_device_id` function, with fallback
             to :data:`self.properties['package_name']` for devices that do not
             respond with :data:`ID_RESPONSE` packet.
+        .. versionchanged:: 0.40.2
+            Use :data:`settling_time_s` as timeout when querying available
+            devices.
         '''
         if port is None and self.port:
             port = self.port
@@ -375,7 +378,8 @@ class SerialProxyMixin(object):
 
         # Look up device information for all available ports.
         device_name = getattr(self, 'device_name', None)
-        df_comports = serial_ports(device_name=device_name)
+        df_comports = serial_ports(device_name=device_name,
+                                   timeout=settling_time_s)
         if port is None:
             ports = df_comports.index.tolist()
         elif isinstance(port, types.StringTypes):
