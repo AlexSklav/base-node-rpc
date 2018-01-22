@@ -20,6 +20,8 @@ requirements:
     # .. versionadded:: X.X.X
     - blinker
     - future
+    # .. versionadded:: X.X.X
+    - json-tricks >=3.8.0
     # .. versionadded:: 0.30
     # .. versionchanged:: 0.38
     - nadamq >=0.14
@@ -43,6 +45,8 @@ requirements:
     - asyncserial >=0.2
     # .. versionadded:: X.X.X
     - blinker
+    # .. versionadded:: X.X.X
+    - json-tricks >=3.8.0
     # .. versionadded:: 0.30
     # .. versionchanged:: 0.38
     - nadamq >=0.14

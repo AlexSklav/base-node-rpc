@@ -1,12 +1,20 @@
+import logging
 import time
 from datetime import datetime
 from Queue import Queue
 from threading import Thread
 
 import blinker
+import json_tricks
 import pandas as pd
 import numpy as np
 from nadamq.NadaMq import cPacketParser, PACKET_TYPES
+
+logger = logging.getLogger(name=__name__)
+
+# Prevent warning about potential future changes to Numpy scalar encoding
+# behaviour.
+json_tricks.NumpyEncoder.SHOW_SCALAR_WARNING = False
 
 
 class PacketQueueManager(object):
@@ -39,7 +47,9 @@ class PacketQueueManager(object):
 
     .. versionchanged:: X.X.X
         Add :attr:`signals` namespace to register handlers for **packet
-        received** or **queue full** signals.
+        received**, **queue full**, or **event** (i.e., a JSON encoded message
+        containing an ``"event"`` key received in a
+        :attr:`nadamq.NadaMq.PACKET_TYPES.STREAM` packet) signals.
 
         Callbacks can be connected to signals, e.g.:
 
@@ -48,6 +58,7 @@ class PacketQueueManager(object):
             my_manager.signals.signal('data-received').connect(foo)
             my_manager.signals.signal('data-full').connect(bar)
             my_manager.signals.signal('stream-received').connect(foobar)
+            my_manager.signals.signal(<event>).connect(barfoo)
 
     '''
     def __init__(self, high_water_mark=None):
@@ -89,7 +100,10 @@ class PacketQueueManager(object):
             packets.
 
         .. versionchanged:: X.X.X
-            Send signal when packet is received or queue is full.
+            Send signal when packet is received, queue is full, or whenever a
+            JSON encoded message containing an ``"event"`` key received in a
+            :attr:`nadamq.NadaMq.PACKET_TYPES.STREAM` packet.  See
+            :attr:`signals`.
 
         Parameters
         ----------
@@ -118,6 +132,17 @@ class PacketQueueManager(object):
         # Filter packets parsed during this method call and queue according to
         # packet type.
         for t, p in packets:
+            if p.type_ == PACKET_TYPES.STREAM:
+                try:
+                    # XXX Use `json_tricks` rather than standard `json` to
+                    # support serializing [Numpy arrays and scalars][1].
+                    #
+                    # [1]: http://json-tricks.readthedocs.io/en/latest/#numpy-arrays
+                    message = json_tricks.loads(p.data())
+                    self.signals.signal(message['event']).send(message)
+                except Exception:
+                    logger.debug('Stream packet contents do not describe an '
+                                 'event: %s', p.data())
             for packet_type_i in ('data', 'ack', 'stream', 'id_response'):
                 if p.type_ == getattr(PACKET_TYPES, packet_type_i.upper()):
                     self.signals.signal('%s-received' % packet_type_i).send(p)
