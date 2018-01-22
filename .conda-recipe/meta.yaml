@@ -17,7 +17,11 @@ requirements:
     - arduino-rpc >=1.10
     # .. versionadded:: 0.38
     - asyncserial >=0.2
+    # .. versionadded:: 0.41
+    - blinker
     - future
+    # .. versionadded:: 0.41
+    - json-tricks >=3.8.0
     # .. versionadded:: 0.30
     # .. versionchanged:: 0.38
     - nadamq >=0.14
@@ -39,6 +43,10 @@ requirements:
     - arduino-rpc >=1.10
     # .. versionadded:: 0.38
     - asyncserial >=0.2
+    # .. versionadded:: 0.41
+    - blinker
+    # .. versionadded:: 0.41
+    - json-tricks >=3.8.0
     # .. versionadded:: 0.30
     # .. versionchanged:: 0.38
     - nadamq >=0.14
@@ -53,7 +61,23 @@ requirements:
 test:
   imports:
     - base_node_rpc
+    # .. versionadded:: 0.41
+    - base_node_rpc._version
     - base_node_rpc.async
+    # .. versionadded:: 0.41
+    - base_node_rpc.bin.upload
+    # .. versionadded:: 0.41
+    - base_node_rpc.bootloader_driver
+    # .. versionadded:: 0.41
+    - base_node_rpc.intel_hex
+    # .. versionadded:: 0.41
+    - base_node_rpc.node
+    # .. versionadded:: 0.41
+    - base_node_rpc.protobuf
+    # .. versionadded:: 0.41
+    - base_node_rpc.proxy
+    # .. versionadded:: 0.41
+    - base_node_rpc.queue
 
 about:
   home: https://github.com/wheeler-microfluidics/base-node-rpc
