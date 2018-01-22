@@ -60,6 +60,9 @@ class PacketQueueManager(object):
             my_manager.signals.signal('stream-received').connect(foobar)
             my_manager.signals.signal(<event>).connect(barfoo)
 
+    .. versionchanged:: 0.41.1
+        Do not add event packets to a queue.  This prevents the ``stream``
+        queue from filling up with rapidly occurring events.
     '''
     def __init__(self, high_water_mark=None):
         self._packet_parser = cPacketParser()
@@ -105,6 +108,10 @@ class PacketQueueManager(object):
             :attr:`nadamq.NadaMq.PACKET_TYPES.STREAM` packet.  See
             :attr:`signals`.
 
+        .. versionchanged:: 0.41.1
+            Do not add event packets to a queue.  This prevents the ``stream``
+            queue from filling up with rapidly occurring events.
+
         Parameters
         ----------
         data : str or bytes
@@ -140,9 +147,14 @@ class PacketQueueManager(object):
                     # [1]: http://json-tricks.readthedocs.io/en/latest/#numpy-arrays
                     message = json_tricks.loads(p.data())
                     self.signals.signal(message['event']).send(message)
+                    # Do not add event packets to a queue.  This prevents the
+                    # `stream` queue from filling up with rapidly occurring
+                    # events.
+                    continue
                 except Exception:
                     logger.debug('Stream packet contents do not describe an '
                                  'event: %s', p.data())
+
             for packet_type_i in ('data', 'ack', 'stream', 'id_response'):
                 if p.type_ == getattr(PACKET_TYPES, packet_type_i.upper()):
                     self.signals.signal('%s-received' % packet_type_i).send(p)
