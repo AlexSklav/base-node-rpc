@@ -61,7 +61,23 @@ requirements:
 test:
   imports:
     - base_node_rpc
+    # .. versionadded:: X.X.X
+    - base_node_rpc._version
     - base_node_rpc.async
+    # .. versionadded:: X.X.X
+    - base_node_rpc.bin.upload
+    # .. versionadded:: X.X.X
+    - base_node_rpc.bootloader_driver
+    # .. versionadded:: X.X.X
+    - base_node_rpc.intel_hex
+    # .. versionadded:: X.X.X
+    - base_node_rpc.node
+    # .. versionadded:: X.X.X
+    - base_node_rpc.protobuf
+    # .. versionadded:: X.X.X
+    - base_node_rpc.proxy
+    # .. versionadded:: X.X.X
+    - base_node_rpc.queue
 
 about:
   home: https://github.com/wheeler-microfluidics/base-node-rpc
