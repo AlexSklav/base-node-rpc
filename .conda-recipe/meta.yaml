@@ -17,6 +17,8 @@ requirements:
     - arduino-rpc >=1.10
     # .. versionadded:: 0.38
     - asyncserial >=0.2
+    # .. versionadded:: X.X.X
+    - blinker
     - future
     # .. versionadded:: 0.30
     # .. versionchanged:: 0.38
@@ -39,6 +41,8 @@ requirements:
     - arduino-rpc >=1.10
     # .. versionadded:: 0.38
     - asyncserial >=0.2
+    # .. versionadded:: X.X.X
+    - blinker
     # .. versionadded:: 0.30
     # .. versionchanged:: 0.38
     - nadamq >=0.14
