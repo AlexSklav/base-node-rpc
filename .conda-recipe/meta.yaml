@@ -17,10 +17,10 @@ requirements:
     - arduino-rpc >=1.10
     # .. versionadded:: 0.38
     - asyncserial >=0.2
-    # .. versionadded:: X.X.X
+    # .. versionadded:: 0.41
     - blinker
     - future
-    # .. versionadded:: X.X.X
+    # .. versionadded:: 0.41
     - json-tricks >=3.8.0
     # .. versionadded:: 0.30
     # .. versionchanged:: 0.38
@@ -43,9 +43,9 @@ requirements:
     - arduino-rpc >=1.10
     # .. versionadded:: 0.38
     - asyncserial >=0.2
-    # .. versionadded:: X.X.X
+    # .. versionadded:: 0.41
     - blinker
-    # .. versionadded:: X.X.X
+    # .. versionadded:: 0.41
     - json-tricks >=3.8.0
     # .. versionadded:: 0.30
     # .. versionchanged:: 0.38
@@ -61,22 +61,22 @@ requirements:
 test:
   imports:
     - base_node_rpc
-    # .. versionadded:: X.X.X
+    # .. versionadded:: 0.41
     - base_node_rpc._version
     - base_node_rpc.async
-    # .. versionadded:: X.X.X
+    # .. versionadded:: 0.41
     - base_node_rpc.bin.upload
-    # .. versionadded:: X.X.X
+    # .. versionadded:: 0.41
     - base_node_rpc.bootloader_driver
-    # .. versionadded:: X.X.X
+    # .. versionadded:: 0.41
     - base_node_rpc.intel_hex
-    # .. versionadded:: X.X.X
+    # .. versionadded:: 0.41
     - base_node_rpc.node
-    # .. versionadded:: X.X.X
+    # .. versionadded:: 0.41
     - base_node_rpc.protobuf
-    # .. versionadded:: X.X.X
+    # .. versionadded:: 0.41
     - base_node_rpc.proxy
-    # .. versionadded:: X.X.X
+    # .. versionadded:: 0.41
     - base_node_rpc.queue
 
 about:

@@ -45,7 +45,7 @@ class PacketQueueManager(object):
 
         See :module:`nadamq` release notes for version 0.13.
 
-    .. versionchanged:: X.X.X
+    .. versionchanged:: 0.41
         Add :attr:`signals` namespace to register handlers for **packet
         received**, **queue full**, or **event** (i.e., a JSON encoded message
         containing an ``"event"`` key received in a
@@ -99,7 +99,7 @@ class PacketQueueManager(object):
             Add handling for :attr:`nadamq.NadaMq.PACKET_TYPES.ID_RESPONSE`
             packets.
 
-        .. versionchanged:: X.X.X
+        .. versionchanged:: 0.41
             Send signal when packet is received, queue is full, or whenever a
             JSON encoded message containing an ``"event"`` key received in a
             :attr:`nadamq.NadaMq.PACKET_TYPES.STREAM` packet.  See
