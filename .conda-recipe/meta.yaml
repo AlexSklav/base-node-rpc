@@ -12,6 +12,10 @@ package:
   name: base-node-rpc
   version: {{ GIT_VERSION }}
 
+# .. versionadded:: X.X.X
+build:
+  noarch: true
+
 requirements:
   build:
     - arduino-rpc >=1.10
@@ -37,7 +41,7 @@ requirements:
     - platformio-tool-teensy
     - platformio-toolchain-atmelavr >=1.40902.1
     - platformio-toolchain-gccarmnoneeabi
-    - python 2.7*
+    - python
     # .. versionchanged:: 0.38
     - serial-device >=0.9
 
@@ -54,7 +58,7 @@ requirements:
     - nadamq >=0.14
     # .. versionadded:: X.X.X
     - or-event
-    - python 2.7*
+    - python
     - platformio-helpers >=0.4
     - platformio-tool-avrdude
     - platformio-tool-scons
