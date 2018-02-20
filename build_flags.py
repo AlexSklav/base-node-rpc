@@ -1,3 +1,5 @@
+from __future__ import absolute_import
+from __future__ import print_function
 import argparse
 import sys
 
@@ -22,4 +24,4 @@ if __name__ == '__main__':
     extra_args += [r'-DDEVICE_ID_RESPONSE=\"base-node-rpc::{}\"'
                    .format(args.version)]
 
-    print ' '.join(extra_args)
+    print(' '.join(extra_args))

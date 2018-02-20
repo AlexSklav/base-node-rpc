@@ -1,3 +1,5 @@
+from __future__ import absolute_import
+from __future__ import print_function
 import warnings
 
 import pandas as pd
@@ -183,8 +185,8 @@ namespace {{ message_name }}_validate {
 #endif  // #ifndef ___{{ package_name.upper() }}_{{ message_name.upper() }}_VALIDATE___
     '''
     with open(output_path, 'wb') as output:
-        print >> output, (jinja2.Template(template)
-                        .render(validator_code=validator_code,
-                                package_name=package_name,
-                                message_name=message_name))
-        print 'Wrote to %s' % output_path
+        print(jinja2.Template(template).render(validator_code=validator_code,
+                                               package_name=package_name,
+                                               message_name=message_name),
+              file=output)
+        print('Wrote to %s' % output_path)

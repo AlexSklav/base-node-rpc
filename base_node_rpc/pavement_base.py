@@ -1,3 +1,5 @@
+from __future__ import absolute_import
+from __future__ import print_function
 from datetime import datetime
 import os
 import platform
@@ -9,6 +11,7 @@ import base_node_rpc
 import path_helpers as ph
 import platformio_helpers as pioh
 import platformio_helpers.develop
+import six
 try:
     from arduino_rpc.pavement_base import *
 except ImportError:
@@ -230,16 +233,16 @@ def generate_command_processor_header(options):
         arduino_src_dir.makedirs_p()
 
     with arduino_src_dir.joinpath('Properties.h').open('wb') as output:
-        print >> output, C_GENERATED_WARNING_MESSAGE % datetime.now()
-        print >> output, '#ifndef ___%s__PROPERTIES___' % module_name.upper()
-        print >> output, '#define ___%s__PROPERTIES___' % module_name.upper()
-        print >> output, ''
-        for k, v in options.PROPERTIES.iteritems():
-            print >> output, '#ifndef BASE_NODE__%s' % k.upper()
-            print >> output, '#define BASE_NODE__%s  ("%s")' % (k.upper(), v)
-            print >> output, '#endif'
-        print >> output, ''
-        print >> output, '#endif'
+        print(C_GENERATED_WARNING_MESSAGE % datetime.now(), file=output)
+        print('#ifndef ___%s__PROPERTIES___' % module_name.upper(), file=output)
+        print('#define ___%s__PROPERTIES___' % module_name.upper(), file=output)
+        print('', file=output)
+        for k, v in six.iteritems(options.PROPERTIES):
+            print('#ifndef BASE_NODE__%s' % k.upper(), file=output)
+            print('#define BASE_NODE__%s  ("%s")' % (k.upper(), v), file=output)
+            print('#endif', file=output)
+        print('', file=output)
+        print('#endif', file=output)
 
     with sketch_dir.joinpath('NodeCommandProcessor.h').open('wb') as output:
         template = jinja2.Template('''\
@@ -250,10 +253,10 @@ def generate_command_processor_header(options):
 #include "{{ camel_name }}/CommandProcessor.h"
 
 #endif  // #ifndef ___{{ name.upper()  }}___''')
-        print >> output, C_GENERATED_WARNING_MESSAGE % datetime.now()
-        print >> output, template.render(name=module_name,
-                                         camel_name=camel_name)
-        print >> output, ''
+        print(C_GENERATED_WARNING_MESSAGE % datetime.now(), file=output)
+        print(template.render(name=module_name, camel_name=camel_name),
+              file=output)
+        print('', file=output)
 
     headers = {'Commands': get_c_commands_header_code,
                'CommandProcessor': get_c_command_processor_header_code}
@@ -261,7 +264,7 @@ def generate_command_processor_header(options):
     methods_filter = getattr(options, 'methods_filter', DEFAULT_METHODS_FILTER)
     pointer_width = getattr(options, 'pointer_width', DEFAULT_POINTER_BITWIDTH)
 
-    for k, f in headers.iteritems():
+    for k, f in six.iteritems(headers):
         output_header = arduino_src_dir.joinpath('%s.h' % k)
         # Prepend auto-generated warning to generated source code.
         f_get_code = lambda *args_: ((C_GENERATED_WARNING_MESSAGE %
@@ -361,11 +364,11 @@ def generate_protobuf_c_code(options):
         c_output_base = arduino_src_dir.joinpath(proto_name + '_pb')
         c_header_path = c_output_base + '.h'
         with open(c_output_base + '.c', 'wb') as output:
-            print >> output, C_GENERATED_WARNING_MESSAGE % datetime.now()
+            print(C_GENERATED_WARNING_MESSAGE % datetime.now(), file=output)
             output.write(nano_pb_code['source'].replace('{{ header_path }}',
                                                         c_header_path.name))
         with open(c_header_path, 'wb') as output:
-            print >> output, C_GENERATED_WARNING_MESSAGE % datetime.now()
+            print(C_GENERATED_WARNING_MESSAGE % datetime.now(), file=output)
             output.write(nano_pb_code['header']
                          .replace('PB_%s_PB_H_INCLUDED' % proto_name.upper(),
                                   'PB__%s__%s_PB_H_INCLUDED' %
@@ -401,8 +404,8 @@ def generate_validate_headers(options):
     sketch_dir = options.rpc_module.get_sketch_directory()
     for proto_path in sketch_dir.abspath().files('*.proto'):
         proto_name = proto_path.namebase
-        print ('[generate_validate_headers] Generate validation header for %s'
-               % proto_name)
+        print('[generate_validate_headers] Generate validation header for %s'
+              % proto_name)
         generate_validate_header(proto_name, sketch_dir)
 
 

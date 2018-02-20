@@ -1,19 +1,22 @@
+from __future__ import absolute_import
 from collections import OrderedDict
-import Queue
 import logging
 import pkg_resources
 import sys
 import threading
 import time
-import types
 import warnings
 
 from arduino_rpc.protobuf import resolve_field_values, PYTYPE_MAP
 from nadamq.NadaMq import cPacket, PACKET_TYPES
 from or_event import OrEvent
+from six.moves import map
+from six.moves import range
+from six.moves import queue
 import serial
 import serial_device as sd
 import serial_device.threaded
+import six
 
 from .queue import PacketQueueManager
 from . import __version__, available_devices, read_device_id
@@ -148,7 +151,7 @@ class I2cProxyMixin(object):
 
     def _send_command(self, packet):
         response = self.proxy.i2c_request(self.address,
-                                          map(ord, packet.data()))
+                                          list(map(ord, packet.data())))
         return cPacket(data=response.tostring(), type_=PACKET_TYPES.DATA)
 
     def __del__(self):
@@ -386,7 +389,7 @@ class SerialProxyMixin(object):
         # Look up device information for all available ports.
         device_name = getattr(self, 'device_name', None)
 
-        if isinstance(port, types.StringTypes):
+        if isinstance(port, six.string_types):
             # Single port was explicitly specified.
             df_comports = serial_ports(device_name=device_name,
                                        timeout=settling_time_s,
@@ -483,7 +486,7 @@ class SerialProxyMixin(object):
                           (len(packet.data()) - self.buffer_size))
 
         # Flush outstanding data packets.
-        for p in xrange(self.queues['data'].qsize()):
+        for p in range(self.queues['data'].qsize()):
             self.queues['data'].get()
 
         try:
@@ -491,7 +494,7 @@ class SerialProxyMixin(object):
                                    .request(self.queues['data'],
                                             packet.tostring(),
                                             timeout_s=timeout_s, poll=poll))
-        except Queue.Empty:
+        except queue.Empty:
             raise IOError('Did not receive response.')
         return response
 
@@ -546,7 +549,7 @@ class ConfigMixinBase(object):
         persistent.
         '''
         save = True
-        if 'save' in kwargs.keys() and not kwargs.pop('save'):
+        if 'save' in kwargs and not kwargs.pop('save'):
             save = False
 
         # convert dictionary to a protobuf
@@ -570,7 +573,7 @@ class ConfigMixinBase(object):
         persistent.
         '''
         save = True
-        if 'save' in kwargs.keys() and not kwargs.pop('save'):
+        if 'save' in kwargs and not kwargs.pop('save'):
             save = False
 
         super(ConfigMixinBase, self).reset_config()

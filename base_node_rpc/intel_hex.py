@@ -1,6 +1,8 @@
+from __future__ import absolute_import
 import re
 
 import pandas as pd
+from six.moves import range
 
 
 cre_hex_record = re.compile(r'^:(?P<byte_count>[0-9a-fA-F]{2})'
@@ -32,7 +34,7 @@ def parse_intel_hex(data):
     matches = []
 
     def hex2ints(hex_str):
-        return [int(hex_str[j:j + 2], 16) for j in xrange(0, len(hex_str), 2)]
+        return [int(hex_str[j:j + 2], 16) for j in range(0, len(hex_str), 2)]
 
     for i, line_i in enumerate(data.splitlines()):
         match_i = cre_hex_record.match(line_i).groupdict()
