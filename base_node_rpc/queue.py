@@ -153,7 +153,7 @@ class PacketQueueManager(object):
                     continue
                 except Exception:
                     logger.debug('Stream packet contents do not describe an '
-                                 'event: %s', p.data())
+                                 'event: %s', p.data(), exc_info=True)
 
             for packet_type_i in ('data', 'ack', 'stream', 'id_response'):
                 if p.type_ == getattr(PACKET_TYPES, packet_type_i.upper()):
