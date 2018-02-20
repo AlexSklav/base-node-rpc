@@ -25,6 +25,8 @@ requirements:
     # .. versionadded:: 0.30
     # .. versionchanged:: 0.38
     - nadamq >=0.14
+    # .. versionadded:: X.X.X
+    - or-event
     - paver
     - pip
     - platformio-framework-arduinoavr
@@ -50,6 +52,8 @@ requirements:
     # .. versionadded:: 0.30
     # .. versionchanged:: 0.38
     - nadamq >=0.14
+    # .. versionadded:: X.X.X
+    - or-event
     - python 2.7*
     - platformio-helpers >=0.4
     - platformio-tool-avrdude

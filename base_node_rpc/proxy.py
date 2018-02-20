@@ -10,10 +10,10 @@ import warnings
 
 from arduino_rpc.protobuf import resolve_field_values, PYTYPE_MAP
 from nadamq.NadaMq import cPacket, PACKET_TYPES
+from or_event import OrEvent
 import serial
 import serial_device as sd
 import serial_device.threaded
-import serial_device.or_event
 
 from .queue import PacketQueueManager
 from . import __version__, available_devices, read_device_id
@@ -442,8 +442,8 @@ class SerialProxyMixin(object):
                                       .KeepAliveReader(PacketProtocol, port_i,
                                                        baudrate=baudrate)
                                       .__enter__())
-                event = sd.or_event.OrEvent(self.serial_thread.closed,
-                                            self.serial_thread.connected)
+                event = OrEvent(self.serial_thread.closed,
+                                self.serial_thread.connected)
             except serial.SerialException:
                 continue
 
