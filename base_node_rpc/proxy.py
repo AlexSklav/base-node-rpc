@@ -192,7 +192,7 @@ def serial_ports(device_name=None, timeout=5., allow_multiple=False):
         # Only return serial ports with matching device name in ``ID_RESPONSE``
         # packet.
         df_comports = available_devices(timeout=timeout)
-        if not 'device_name' in df_comports:
+        if 'device_name' not in df_comports:
             # No devices found with matching name.
             raise DeviceNotFound('No named devices found.')
         elif df_comports.shape[0]:
