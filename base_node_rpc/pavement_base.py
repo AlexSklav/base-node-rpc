@@ -128,7 +128,6 @@ def generate_validate_header(py_proto_module_name, sketch_dir):
 
     from clang_helpers.data_frame import underscore_to_camelcase
     from path_helpers import path
-    import c_array_defs
     from .protobuf import (get_handler_validator_class_code,
                            write_handler_validator_header)
     from . import get_lib_directory
@@ -155,9 +154,11 @@ def generate_validate_header(py_proto_module_name, sketch_dir):
         # Add stub `stdint.h` header to includes path.
         stdint_stub_path = (ph.path(__file__).parent.joinpath('StdIntStub')
                             .realpath())
+        c_array_defs_path = (conda_arduino_include_path()
+                             .joinpath('CArrayDefs'))
         args = ['-DSTDINT_STUB']
-        include_paths = ([stdint_stub_path, lib_dir.realpath()] +
-                         c_array_defs.get_includes())
+        include_paths = [stdint_stub_path, lib_dir.realpath(),
+                         c_array_defs_path]
         args += ['-I%s' % p for p in include_paths]
 
         validator_code = get_handler_validator_class_code(input_headers,
@@ -215,7 +216,6 @@ def generate_command_processor_header(options):
     from arduino_rpc.rpc_data_frame import (get_c_commands_header_code,
                                             get_c_command_processor_header_code)
     from clang_helpers.data_frame import underscore_to_camelcase
-    import c_array_defs
     import jinja2
 
     module_name = _get_module_name(options.PROPERTIES)
@@ -275,9 +275,11 @@ def generate_command_processor_header(options):
         # Add stub `stdint.h` header to includes path.
         stdint_stub_path = (ph.path(__file__).parent.joinpath('StdIntStub')
                             .realpath())
+        c_array_defs_path = (conda_arduino_include_path()
+                             .joinpath('CArrayDefs'))
         args = ['-DSTDINT_STUB']
-        include_paths = ([stdint_stub_path, lib_dir.realpath()] +
-                         c_array_defs.get_includes())
+        include_paths = [stdint_stub_path, lib_dir.realpath(),
+                         c_array_defs_path]
         args += ['-I%s' % p for p in include_paths]
         write_code(input_headers, input_classes, output_header, f_get_code,
                    *args, methods_filter=methods_filter,
@@ -290,7 +292,6 @@ def generate_python_code(options):
     from arduino_rpc.code_gen import (write_code,
                                       PYTHON_GENERATED_WARNING_MESSAGE)
     from arduino_rpc.rpc_data_frame import get_python_code
-    import c_array_defs
 
     module_name = _get_module_name(options.PROPERTIES)
     sketch_dir = options.rpc_module.get_sketch_directory()
@@ -324,9 +325,9 @@ class SerialProxy(SerialProxyMixin, Proxy):
     # Add stub `stdint.h` header to includes path.
     stdint_stub_path = (ph.path(__file__).parent.joinpath('StdIntStub')
                         .realpath())
+    c_array_defs_path = conda_arduino_include_path().joinpath('CArrayDefs')
     args = ['-DSTDINT_STUB']
-    include_paths = ([stdint_stub_path, lib_dir.realpath()] +
-                     c_array_defs.get_includes())
+    include_paths = [stdint_stub_path, lib_dir.realpath(), c_array_defs_path]
     args += ['-I%s' % p for p in include_paths]
     write_code(input_headers, input_classes, output_file, f_python_code,
                *args, methods_filter=methods_filter,
