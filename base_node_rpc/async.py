@@ -4,11 +4,12 @@ import platform
 
 from functools import wraps
 from nadamq.NadaMq import cPacket, cPacketParser, PACKET_TYPES
+from trololio import coroutine, From, Return
+from trololio import asyncio
 import asyncserial
 import numpy as np
 import pandas as pd
 import serial_device as sd
-import trollius as asyncio
 
 
 logger = logging.getLogger(__name__)
@@ -20,7 +21,7 @@ class ParseError(Exception):
     pass
 
 
-@asyncio.coroutine
+@coroutine
 def read_packet(serial_):
     '''
     Read a single packet from a serial device.
@@ -41,15 +42,15 @@ def read_packet(serial_):
     parser = cPacketParser()
     result = False
     while result is False:
-        character = yield asyncio.From(serial_.read(8 << 10))
+        character = yield From(serial_.read(8 << 10))
         result = parser.parse(np.fromstring(character, dtype='uint8'))
         if parser.error:
             # Error parsing packet.
             raise ParseError('Error parsing packet.')
-    raise asyncio.Return(result)
+    raise Return(result)
 
 
-@asyncio.coroutine
+@coroutine
 def _read_device_id(**kwargs):
     '''
     Request device identifier from a serial device.
@@ -75,18 +76,18 @@ def _read_device_id(**kwargs):
     result = kwargs.copy()
     with asyncserial.AsyncSerial(**kwargs) as async_device:
         async_device.write(ID_REQUEST)
-        done, pending = yield asyncio.wait([read_packet(async_device)],
-                                           timeout=timeout)
+        done, pending = yield From(asyncio.wait([read_packet(async_device)],
+                                                timeout=timeout))
         if not done:
             logger.debug('Timed out waiting for: %s', kwargs)
-            raise asyncio.Return(None)
+            raise Return(None)
         response = list(done)[0].result().data()
         result['device_name'], result['device_version'] = \
-            response.strip().split('::')
-        raise asyncio.Return(result)
+            response.strip().split(b'::')
+        raise Return(result)
 
 
-@asyncio.coroutine
+@coroutine
 def _available_devices(ports, baudrate=9600, timeout=None):
     '''
     Request list of available serial devices, including device identifier (if
@@ -116,10 +117,10 @@ def _available_devices(ports, baudrate=9600, timeout=None):
     '''
     if not ports.shape[0]:
         # No ports
-        raise asyncio.Return(ports)
+        raise Return(ports)
     futures = [_read_device_id(port=name_i, baudrate=baudrate, timeout=timeout)
                for name_i in ports.index]
-    done, pending = yield asyncio.From(asyncio.wait(futures))
+    done, pending = yield From(asyncio.wait(futures))
     results = [task_i.result() for task_i in done
                if task_i.result() is not None]
     if results:
@@ -127,7 +128,7 @@ def _available_devices(ports, baudrate=9600, timeout=None):
         df_results = ports.join(df_results)
     else:
         df_results = ports
-    raise asyncio.Return(df_results)
+    raise Return(df_results)
 
 
 def with_loop(func):

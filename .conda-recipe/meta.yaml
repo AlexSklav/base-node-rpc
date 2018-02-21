@@ -20,7 +20,8 @@ requirements:
   build:
     - arduino-rpc >=1.10
     # .. versionadded:: 0.38
-    - asyncserial >=0.2
+    - asyncserial >=0.2  # [py27]
+    - asyncserial  # [py3k]
     # .. versionadded:: 0.41
     - blinker
     - future
@@ -44,11 +45,14 @@ requirements:
     - python
     # .. versionchanged:: 0.38
     - serial-device >=0.9
+    # .. versionadded:: X.X.X
+    - trololio
 
   run:
     - arduino-rpc >=1.10
     # .. versionadded:: 0.38
-    - asyncserial >=0.2
+    - asyncserial >=0.2  # [py27]
+    - asyncserial  # [py3k]
     # .. versionadded:: 0.41
     - blinker
     # .. versionadded:: 0.41
@@ -65,6 +69,8 @@ requirements:
     - platformio-tool-teensy
     # .. versionchanged:: 0.38
     - serial-device >=0.9
+    # .. versionadded:: X.X.X
+    - trololio
 
 test:
   imports:
