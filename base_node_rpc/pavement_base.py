@@ -232,7 +232,7 @@ def generate_command_processor_header(options):
     if not arduino_src_dir.isdir():
         arduino_src_dir.makedirs_p()
 
-    with arduino_src_dir.joinpath('Properties.h').open('wb') as output:
+    with arduino_src_dir.joinpath('Properties.h').open('w') as output:
         print(C_GENERATED_WARNING_MESSAGE % datetime.now(), file=output)
         print('#ifndef ___%s__PROPERTIES___' % module_name.upper(), file=output)
         print('#define ___%s__PROPERTIES___' % module_name.upper(), file=output)
@@ -244,7 +244,7 @@ def generate_command_processor_header(options):
         print('', file=output)
         print('#endif', file=output)
 
-    with sketch_dir.joinpath('NodeCommandProcessor.h').open('wb') as output:
+    with sketch_dir.joinpath('NodeCommandProcessor.h').open('w') as output:
         template = jinja2.Template('''\
 #ifndef ___{{ name.upper()  }}___
 #define ___{{ name.upper()  }}___
@@ -364,11 +364,11 @@ def generate_protobuf_c_code(options):
         nano_pb_code = npb.compile_nanopb(proto_path, **kwargs)
         c_output_base = arduino_src_dir.joinpath(proto_name + '_pb')
         c_header_path = c_output_base + '.h'
-        with open(c_output_base + '.c', 'wb') as output:
+        with open(c_output_base + '.c', 'w') as output:
             print(C_GENERATED_WARNING_MESSAGE % datetime.now(), file=output)
             output.write(nano_pb_code['source'].replace('{{ header_path }}',
                                                         c_header_path.name))
-        with open(c_header_path, 'wb') as output:
+        with open(c_header_path, 'w') as output:
             print(C_GENERATED_WARNING_MESSAGE % datetime.now(), file=output)
             output.write(nano_pb_code['header']
                          .replace('PB_%s_PB_H_INCLUDED' % proto_name.upper(),
@@ -434,7 +434,7 @@ def init_config():
     lib_dir = get_lib_directory()
 
     output_path = sketch_dir.joinpath('config.proto')
-    template = lib_dir.joinpath('config.protot').bytes()
+    template = lib_dir.joinpath('config.protot').text()
 
     if not output_path.isfile() or overwrite:
         output = jinja2.Template(template).render(package=
@@ -489,7 +489,7 @@ def generate_library_main_header(options):
     library_header = library_dir.joinpath('src', '%s.h' % library_dir.name)
     if not library_header.isdir():
         library_header.parent.makedirs_p()
-    with library_header.open('wb') as output:
+    with library_header.open('w') as output:
         output.write('''
 #ifndef ___{module_name_upper}__H___
 #define ___{module_name_upper}__H___
