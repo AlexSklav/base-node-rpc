@@ -17,7 +17,7 @@ package:
   name: {{ PKG_NAME }}
   version: {{ GIT_VERSION }}
 
-# .. versionadded:: X.X.X
+#: .. versionadded:: X.X.X
 build:
   noarch: true
   script:
@@ -70,15 +70,15 @@ requirements:
     #: .. versionchanged:: X.X.X
     - asyncserial >=0.2  # [py27]
     - asyncserial  # [py3k]
-    # .. versionadded:: 0.41
+    #: .. versionadded:: 0.41
     - blinker
     - future
-    # .. versionadded:: 0.41
+    #: .. versionadded:: 0.41
     - json-tricks >=3.8.0
-    # .. versionadded:: 0.30
-    # .. versionchanged:: 0.38
+    #: .. versionadded:: 0.30
+    #: .. versionchanged:: 0.38
     - nadamq >=0.14
-    # .. versionadded:: X.X.X
+    #: .. versionadded:: X.X.X
     - or-event
     - paver
     - pip
@@ -92,7 +92,7 @@ requirements:
     - platformio-toolchain-atmelavr >=1.40902.1
     - platformio-toolchain-gccarmnoneeabi ==1.50401.0
     - python
-    # .. versionchanged:: 0.38
+    #: .. versionchanged:: 0.38
     - serial-device >=0.9
 
   run:
@@ -101,42 +101,42 @@ requirements:
     #: .. versionchanged:: X.X.X
     - asyncserial >=0.2  # [py27]
     - asyncserial  # [py3k]
-    # .. versionadded:: 0.41
+    #: .. versionadded:: 0.41
     - blinker
-    # .. versionadded:: 0.41
+    #: .. versionadded:: 0.41
     - json-tricks >=3.8.0
-    # .. versionadded:: 0.30
-    # .. versionchanged:: 0.38
+    #: .. versionadded:: 0.30
+    #: .. versionchanged:: 0.38
     - nadamq >=0.14
-    # .. versionadded:: X.X.X
+    #: .. versionadded:: X.X.X
     - or-event
     - python
     - platformio-helpers >=0.4
     - platformio-tool-avrdude
     - platformio-tool-scons
     - platformio-tool-teensy
-    # .. versionchanged:: 0.38
+    #: .. versionchanged:: 0.38
     - serial-device >=0.9
 
 test:
   imports:
     - base_node_rpc
-    # .. versionadded:: 0.41
+    #: .. versionadded:: 0.41
     - base_node_rpc._version
     - base_node_rpc.async
-    # .. versionadded:: 0.41
+    #: .. versionadded:: 0.41
     - base_node_rpc.bin.upload
-    # .. versionadded:: 0.41
+    #: .. versionadded:: 0.41
     - base_node_rpc.bootloader_driver
-    # .. versionadded:: 0.41
+    #: .. versionadded:: 0.41
     - base_node_rpc.intel_hex
-    # .. versionadded:: 0.41
+    #: .. versionadded:: 0.41
     - base_node_rpc.node
-    # .. versionadded:: 0.41
+    #: .. versionadded:: 0.41
     - base_node_rpc.protobuf
-    # .. versionadded:: 0.41
+    #: .. versionadded:: 0.41
     - base_node_rpc.proxy
-    # .. versionadded:: 0.41
+    #: .. versionadded:: 0.41
     - base_node_rpc.queue
 
 about:
