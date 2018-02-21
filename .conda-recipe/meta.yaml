@@ -35,6 +35,7 @@ requirements:
     - or-event
     - paver
     - pip
+    - platformio
     - platformio-framework-arduinoavr
     - platformio-framework-arduinoteensy
     - platformio-helpers >=0.4
@@ -42,7 +43,7 @@ requirements:
     - platformio-tool-scons
     - platformio-tool-teensy
     - platformio-toolchain-atmelavr >=1.40902.1
-    - platformio-toolchain-gccarmnoneeabi
+    - platformio-toolchain-gccarmnoneeabi ==1.50401.0
     - python
     # .. versionchanged:: 0.38
     - serial-device >=0.9
