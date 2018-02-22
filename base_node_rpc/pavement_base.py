@@ -388,7 +388,7 @@ def generate_protobuf_python_code(options):
         pb_code = npb.compile_pb(proto_path)
         module_name = _get_module_name(options.PROPERTIES)
         output_path = path(module_name).joinpath(proto_name + '.py')
-        output_path.write_bytes(pb_code['python'])
+        output_path.write_text(pb_code['python'])
 
 
 @task
@@ -440,7 +440,7 @@ def init_config():
         output = jinja2.Template(template).render(package=
                                                   options
                                                   .PROPERTIES['package_name'])
-        output_path.write_bytes(output)
+        output_path.write_text(output)
     else:
         raise IOError('Output path exists.  Use `overwrite` to force '
                       'overwrite.')

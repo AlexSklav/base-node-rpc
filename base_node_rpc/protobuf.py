@@ -184,7 +184,7 @@ namespace {{ message_name }}_validate {
 
 #endif  // #ifndef ___{{ package_name.upper() }}_{{ message_name.upper() }}_VALIDATE___
     '''
-    with open(output_path, 'wb') as output:
+    with open(output_path, 'w') as output:
         print(jinja2.Template(template).render(validator_code=validator_code,
                                                package_name=package_name,
                                                message_name=message_name),
