@@ -91,7 +91,8 @@ requirements:
     - platformio-tool-teensy
     - platformio-toolchain-atmelavr >=1.40902.1
     - platformio-toolchain-gccarmnoneeabi ==1.50401.0
-    - python
+    #: .. versionchanged:: X.X.X
+    - python {{ python }}
     #: .. versionchanged:: 0.38
     - serial-device >=0.9
 
@@ -110,7 +111,8 @@ requirements:
     - nadamq >=0.14
     #: .. versionadded:: X.X.X
     - or-event
-    - python
+    #: .. versionchanged:: X.X.X
+    - python {{ python }}
     - platformio-helpers >=0.4
     - platformio-tool-avrdude
     - platformio-tool-scons
