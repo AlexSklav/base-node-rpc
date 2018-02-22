@@ -17,7 +17,7 @@ package:
   name: {{ PKG_NAME }}
   version: {{ GIT_VERSION }}
 
-#: .. versionadded:: X.X.X
+#: .. versionadded:: 0.42
 build:
   noarch: true
   script:
@@ -67,7 +67,7 @@ requirements:
   build:
     - arduino-rpc >=1.10
     #: .. versionadded:: 0.38
-    #: .. versionchanged:: X.X.X
+    #: .. versionchanged:: 0.42
     - asyncserial >=0.2  # [py27]
     - asyncserial  # [py3k]
     #: .. versionadded:: 0.41
@@ -78,7 +78,7 @@ requirements:
     #: .. versionadded:: 0.30
     #: .. versionchanged:: 0.38
     - nadamq >=0.14
-    #: .. versionadded:: X.X.X
+    #: .. versionadded:: 0.42
     - or-event
     - paver
     - pip
@@ -91,7 +91,7 @@ requirements:
     - platformio-tool-teensy
     - platformio-toolchain-atmelavr >=1.40902.1
     - platformio-toolchain-gccarmnoneeabi ==1.50401.0
-    #: .. versionchanged:: X.X.X
+    #: .. versionchanged:: 0.42
     - python {{ python }}
     #: .. versionchanged:: 0.38
     - serial-device >=0.9
@@ -99,7 +99,7 @@ requirements:
   run:
     - arduino-rpc >=1.10
     #: .. versionadded:: 0.38
-    #: .. versionchanged:: X.X.X
+    #: .. versionchanged:: 0.42
     - asyncserial >=0.2  # [py27]
     - asyncserial  # [py3k]
     #: .. versionadded:: 0.41
@@ -109,9 +109,9 @@ requirements:
     #: .. versionadded:: 0.30
     #: .. versionchanged:: 0.38
     - nadamq >=0.14
-    #: .. versionadded:: X.X.X
+    #: .. versionadded:: 0.42
     - or-event
-    #: .. versionchanged:: X.X.X
+    #: .. versionchanged:: 0.42
     - python {{ python }}
     - platformio-helpers >=0.4
     - platformio-tool-avrdude
