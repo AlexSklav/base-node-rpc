@@ -1,3 +1,8 @@
+{% set PKG_NAME = 'base-node-rpc' %}
+{% set PLATFORMIO_ENVS = 'uno pro8MHzatmega328 teensy31 micro megaADK megaatmega2560'.split(' ') %}
+{% set LIB_NAME = 'BaseNodeRpc' %}
+{% set MODULE_NAME = PKG_NAME.replace('-', '_') %}
+
 {% if GIT_DESCRIBE_NUMBER > '0' %}
 {% set GIT_VERSION = GIT_DESCRIBE_TAG[1:] + '.post' + GIT_DESCRIBE_NUMBER %}
 {% else %}
@@ -9,24 +14,75 @@ source:
   git_url: ../
 
 package:
-  name: base-node-rpc
+  name: {{ PKG_NAME }}
   version: {{ GIT_VERSION }}
+
+#: .. versionadded:: 0.42
+build:
+  noarch: true
+  script:
+    # Generate Arduino `library.properties` file
+    - python -m paver generate_arduino_library_properties
+    # Generate Arduino code
+    - python -m paver generate_all_code
+    # Copy Arduino library to Conda include directory
+    - python -c
+        "import os.path; import os; import shutil;
+        lib_src_dir = os.path.join(os.environ['SRC_DIR'], 'lib',
+                                   '{{ LIB_NAME }}');
+        install_dir = os.path.join(os.environ['PREFIX'],
+                                   'Library',  # [win]
+                                   'include', 'Arduino', '{{ LIB_NAME }}');
+        shutil.copytree(lib_src_dir, install_dir);
+        "
+    # Build firmware
+    - python -m paver build_firmware
+    # Copy compiled firmware to Conda bin directory
+    - python -c
+        "import os.path; import os; import shutil;
+        SRC_DIR = os.environ['SRC_DIR'];
+        PIO_BIN_DIR = os.path.join(os.environ['PREFIX'],
+                                   'Library',  # [win]
+                                   'bin', 'platformio', '{{ PKG_NAME }}');
+        created = (None if os.path.isdir(PIO_BIN_DIR)
+                   else os.makedirs(PIO_BIN_DIR));
+        shutil.copy2(os.path.join(SRC_DIR, 'platformio.ini'),
+                     os.path.join(PIO_BIN_DIR, 'platformio.ini'));
+        {% for pio_platform in PLATFORMIO_ENVS -%}
+        HEX_DIR = os.path.join(PIO_BIN_DIR, '{{ pio_platform }}');
+        os.makedirs(HEX_DIR);
+        shutil.copy2(os.path.join(SRC_DIR, '.pioenvs', '{{ pio_platform }}',
+                                  'firmware.hex'),
+                      os.path.join(PIO_BIN_DIR, '{{ pio_platform }}',
+                                   'firmware.hex'));
+        {%- endfor %}
+        "
+    # Generate `setup.py` from `pavement.py` definition.
+    - python -m paver generate_setup
+
+    # Install source directory as Python package.
+    - python -B setup.py install --single-version-externally-managed --record record.txt
 
 requirements:
   build:
     - arduino-rpc >=1.10
-    # .. versionadded:: 0.38
-    - asyncserial >=0.2
-    # .. versionadded:: 0.41
+    #: .. versionadded:: 0.38
+    #: .. versionchanged:: 0.42
+    - asyncserial >=0.2  # [py27]
+    - asyncserial  # [py3k]
+    #: .. versionadded:: 0.41
     - blinker
     - future
-    # .. versionadded:: 0.41
+    #: .. versionadded:: 0.41
     - json-tricks >=3.8.0
-    # .. versionadded:: 0.30
-    # .. versionchanged:: 0.38
+    #: .. versionadded:: 0.30
+    #: .. versionchanged:: 0.38
     - nadamq >=0.14
+    #: .. versionadded:: 0.42
+    - or-event
     - paver
     - pip
+    - platformio
     - platformio-framework-arduinoavr
     - platformio-framework-arduinoteensy
     - platformio-helpers >=0.4
@@ -34,49 +90,55 @@ requirements:
     - platformio-tool-scons
     - platformio-tool-teensy
     - platformio-toolchain-atmelavr >=1.40902.1
-    - platformio-toolchain-gccarmnoneeabi
-    - python 2.7*
-    # .. versionchanged:: 0.38
+    - platformio-toolchain-gccarmnoneeabi ==1.50401.0
+    #: .. versionchanged:: 0.42
+    - python {{ python }}
+    #: .. versionchanged:: 0.38
     - serial-device >=0.9
 
   run:
     - arduino-rpc >=1.10
-    # .. versionadded:: 0.38
-    - asyncserial >=0.2
-    # .. versionadded:: 0.41
+    #: .. versionadded:: 0.38
+    #: .. versionchanged:: 0.42
+    - asyncserial >=0.2  # [py27]
+    - asyncserial  # [py3k]
+    #: .. versionadded:: 0.41
     - blinker
-    # .. versionadded:: 0.41
+    #: .. versionadded:: 0.41
     - json-tricks >=3.8.0
-    # .. versionadded:: 0.30
-    # .. versionchanged:: 0.38
+    #: .. versionadded:: 0.30
+    #: .. versionchanged:: 0.38
     - nadamq >=0.14
-    - python 2.7*
+    #: .. versionadded:: 0.42
+    - or-event
+    #: .. versionchanged:: 0.42
+    - python {{ python }}
     - platformio-helpers >=0.4
     - platformio-tool-avrdude
     - platformio-tool-scons
     - platformio-tool-teensy
-    # .. versionchanged:: 0.38
+    #: .. versionchanged:: 0.38
     - serial-device >=0.9
 
 test:
   imports:
     - base_node_rpc
-    # .. versionadded:: 0.41
+    #: .. versionadded:: 0.41
     - base_node_rpc._version
     - base_node_rpc.async
-    # .. versionadded:: 0.41
+    #: .. versionadded:: 0.41
     - base_node_rpc.bin.upload
-    # .. versionadded:: 0.41
+    #: .. versionadded:: 0.41
     - base_node_rpc.bootloader_driver
-    # .. versionadded:: 0.41
+    #: .. versionadded:: 0.41
     - base_node_rpc.intel_hex
-    # .. versionadded:: 0.41
+    #: .. versionadded:: 0.41
     - base_node_rpc.node
-    # .. versionadded:: 0.41
+    #: .. versionadded:: 0.41
     - base_node_rpc.protobuf
-    # .. versionadded:: 0.41
+    #: .. versionadded:: 0.41
     - base_node_rpc.proxy
-    # .. versionadded:: 0.41
+    #: .. versionadded:: 0.41
     - base_node_rpc.queue
 
 about:

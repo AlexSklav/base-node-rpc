@@ -1,13 +1,17 @@
 '''
 .. versionadded:: v0.33
 '''
+from __future__ import absolute_import
+from __future__ import print_function
 import itertools as it
 import struct
 import time
-import types
 
+from builtins import bytes
+from six.moves import range
 import numpy as np
 import path_helpers as ph
+import six
 
 from .intel_hex import parse_intel_hex
 
@@ -26,8 +30,8 @@ def _data_as_list(data):
     '''
     if isinstance(data, np.ndarray):
         data = data.tostring()
-    if isinstance(data, types.StringTypes):
-        data = map(ord, data)
+    if isinstance(data, six.string_types):
+        data = list(bytes(data.encode('utf8')))
     return data
 
 
@@ -209,14 +213,16 @@ class TwiBootloader(object):
         for i, page_i in enumerate(pages):
             # If `verify` is `True`, retry failed page writes up to 10 times.
             for delay_j in delay_durations:
-                print 'Write page: %4d/%d     \r' % (i + 1, len(pages)),
+                print('Write page: %4d/%d     \r' % (i + 1, len(pages)),
+                      end=' ')
                 self.write_flash(i * chip_info['page_size'], page_i)
                 # Delay to allow bootloader to finish writing to flash.
                 time.sleep(delay_j)
 
                 if not verify:
                     break
-                print 'Verify page: %4d/%d    \r' % (i + 1, len(pages)),
+                print('Verify page: %4d/%d    \r' % (i + 1, len(pages)),
+                      end=' ')
                 # Verify written page.
                 verify_data_i = self.read_flash(i * chip_info['page_size'],
                                                 chip_info['page_size'])
@@ -261,7 +267,7 @@ def load_pages(firmware_path, page_size):
     data_bytes = list(it.chain(*df_data.loc[df_data.record_type == 0, 'data']))
 
     pages = [data_bytes[i:i + page_size]
-             for i in xrange(0, len(data_bytes), page_size)]
+             for i in range(0, len(data_bytes), page_size)]
 
     # Pad end of last page with 0xFF to fill full page size.
     pages[-1].extend([0xFF] * (page_size - len(pages[-1])))

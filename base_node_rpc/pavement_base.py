@@ -1,3 +1,5 @@
+from __future__ import absolute_import
+from __future__ import print_function
 from datetime import datetime
 import os
 import platform
@@ -9,6 +11,7 @@ import base_node_rpc
 import path_helpers as ph
 import platformio_helpers as pioh
 import platformio_helpers.develop
+import six
 try:
     from arduino_rpc.pavement_base import *
 except ImportError:
@@ -125,7 +128,6 @@ def generate_validate_header(py_proto_module_name, sketch_dir):
 
     from clang_helpers.data_frame import underscore_to_camelcase
     from path_helpers import path
-    import c_array_defs
     from .protobuf import (get_handler_validator_class_code,
                            write_handler_validator_header)
     from . import get_lib_directory
@@ -152,9 +154,11 @@ def generate_validate_header(py_proto_module_name, sketch_dir):
         # Add stub `stdint.h` header to includes path.
         stdint_stub_path = (ph.path(__file__).parent.joinpath('StdIntStub')
                             .realpath())
+        c_array_defs_path = (conda_arduino_include_path()
+                             .joinpath('CArrayDefs'))
         args = ['-DSTDINT_STUB']
-        include_paths = ([stdint_stub_path, lib_dir.realpath()] +
-                         c_array_defs.get_includes())
+        include_paths = [stdint_stub_path, lib_dir.realpath(),
+                         c_array_defs_path]
         args += ['-I%s' % p for p in include_paths]
 
         validator_code = get_handler_validator_class_code(input_headers,
@@ -212,7 +216,6 @@ def generate_command_processor_header(options):
     from arduino_rpc.rpc_data_frame import (get_c_commands_header_code,
                                             get_c_command_processor_header_code)
     from clang_helpers.data_frame import underscore_to_camelcase
-    import c_array_defs
     import jinja2
 
     module_name = _get_module_name(options.PROPERTIES)
@@ -229,19 +232,19 @@ def generate_command_processor_header(options):
     if not arduino_src_dir.isdir():
         arduino_src_dir.makedirs_p()
 
-    with arduino_src_dir.joinpath('Properties.h').open('wb') as output:
-        print >> output, C_GENERATED_WARNING_MESSAGE % datetime.now()
-        print >> output, '#ifndef ___%s__PROPERTIES___' % module_name.upper()
-        print >> output, '#define ___%s__PROPERTIES___' % module_name.upper()
-        print >> output, ''
-        for k, v in options.PROPERTIES.iteritems():
-            print >> output, '#ifndef BASE_NODE__%s' % k.upper()
-            print >> output, '#define BASE_NODE__%s  ("%s")' % (k.upper(), v)
-            print >> output, '#endif'
-        print >> output, ''
-        print >> output, '#endif'
+    with arduino_src_dir.joinpath('Properties.h').open('w') as output:
+        print(C_GENERATED_WARNING_MESSAGE % datetime.now(), file=output)
+        print('#ifndef ___%s__PROPERTIES___' % module_name.upper(), file=output)
+        print('#define ___%s__PROPERTIES___' % module_name.upper(), file=output)
+        print('', file=output)
+        for k, v in six.iteritems(options.PROPERTIES):
+            print('#ifndef BASE_NODE__%s' % k.upper(), file=output)
+            print('#define BASE_NODE__%s  ("%s")' % (k.upper(), v), file=output)
+            print('#endif', file=output)
+        print('', file=output)
+        print('#endif', file=output)
 
-    with sketch_dir.joinpath('NodeCommandProcessor.h').open('wb') as output:
+    with sketch_dir.joinpath('NodeCommandProcessor.h').open('w') as output:
         template = jinja2.Template('''\
 #ifndef ___{{ name.upper()  }}___
 #define ___{{ name.upper()  }}___
@@ -250,10 +253,10 @@ def generate_command_processor_header(options):
 #include "{{ camel_name }}/CommandProcessor.h"
 
 #endif  // #ifndef ___{{ name.upper()  }}___''')
-        print >> output, C_GENERATED_WARNING_MESSAGE % datetime.now()
-        print >> output, template.render(name=module_name,
-                                         camel_name=camel_name)
-        print >> output, ''
+        print(C_GENERATED_WARNING_MESSAGE % datetime.now(), file=output)
+        print(template.render(name=module_name, camel_name=camel_name),
+              file=output)
+        print('', file=output)
 
     headers = {'Commands': get_c_commands_header_code,
                'CommandProcessor': get_c_command_processor_header_code}
@@ -261,7 +264,7 @@ def generate_command_processor_header(options):
     methods_filter = getattr(options, 'methods_filter', DEFAULT_METHODS_FILTER)
     pointer_width = getattr(options, 'pointer_width', DEFAULT_POINTER_BITWIDTH)
 
-    for k, f in headers.iteritems():
+    for k, f in six.iteritems(headers):
         output_header = arduino_src_dir.joinpath('%s.h' % k)
         # Prepend auto-generated warning to generated source code.
         f_get_code = lambda *args_: ((C_GENERATED_WARNING_MESSAGE %
@@ -272,9 +275,11 @@ def generate_command_processor_header(options):
         # Add stub `stdint.h` header to includes path.
         stdint_stub_path = (ph.path(__file__).parent.joinpath('StdIntStub')
                             .realpath())
+        c_array_defs_path = (conda_arduino_include_path()
+                             .joinpath('CArrayDefs'))
         args = ['-DSTDINT_STUB']
-        include_paths = ([stdint_stub_path, lib_dir.realpath()] +
-                         c_array_defs.get_includes())
+        include_paths = [stdint_stub_path, lib_dir.realpath(),
+                         c_array_defs_path]
         args += ['-I%s' % p for p in include_paths]
         write_code(input_headers, input_classes, output_header, f_get_code,
                    *args, methods_filter=methods_filter,
@@ -287,7 +292,6 @@ def generate_python_code(options):
     from arduino_rpc.code_gen import (write_code,
                                       PYTHON_GENERATED_WARNING_MESSAGE)
     from arduino_rpc.rpc_data_frame import get_python_code
-    import c_array_defs
 
     module_name = _get_module_name(options.PROPERTIES)
     sketch_dir = options.rpc_module.get_sketch_directory()
@@ -321,9 +325,9 @@ class SerialProxy(SerialProxyMixin, Proxy):
     # Add stub `stdint.h` header to includes path.
     stdint_stub_path = (ph.path(__file__).parent.joinpath('StdIntStub')
                         .realpath())
+    c_array_defs_path = conda_arduino_include_path().joinpath('CArrayDefs')
     args = ['-DSTDINT_STUB']
-    include_paths = ([stdint_stub_path, lib_dir.realpath()] +
-                     c_array_defs.get_includes())
+    include_paths = [stdint_stub_path, lib_dir.realpath(), c_array_defs_path]
     args += ['-I%s' % p for p in include_paths]
     write_code(input_headers, input_classes, output_file, f_python_code,
                *args, methods_filter=methods_filter,
@@ -360,12 +364,12 @@ def generate_protobuf_c_code(options):
         nano_pb_code = npb.compile_nanopb(proto_path, **kwargs)
         c_output_base = arduino_src_dir.joinpath(proto_name + '_pb')
         c_header_path = c_output_base + '.h'
-        with open(c_output_base + '.c', 'wb') as output:
-            print >> output, C_GENERATED_WARNING_MESSAGE % datetime.now()
+        with open(c_output_base + '.c', 'w') as output:
+            print(C_GENERATED_WARNING_MESSAGE % datetime.now(), file=output)
             output.write(nano_pb_code['source'].replace('{{ header_path }}',
                                                         c_header_path.name))
-        with open(c_header_path, 'wb') as output:
-            print >> output, C_GENERATED_WARNING_MESSAGE % datetime.now()
+        with open(c_header_path, 'w') as output:
+            print(C_GENERATED_WARNING_MESSAGE % datetime.now(), file=output)
             output.write(nano_pb_code['header']
                          .replace('PB_%s_PB_H_INCLUDED' % proto_name.upper(),
                                   'PB__%s__%s_PB_H_INCLUDED' %
@@ -401,8 +405,8 @@ def generate_validate_headers(options):
     sketch_dir = options.rpc_module.get_sketch_directory()
     for proto_path in sketch_dir.abspath().files('*.proto'):
         proto_name = proto_path.namebase
-        print ('[generate_validate_headers] Generate validation header for %s'
-               % proto_name)
+        print('[generate_validate_headers] Generate validation header for %s'
+              % proto_name)
         generate_validate_header(proto_name, sketch_dir)
 
 
@@ -430,7 +434,7 @@ def init_config():
     lib_dir = get_lib_directory()
 
     output_path = sketch_dir.joinpath('config.proto')
-    template = lib_dir.joinpath('config.protot').bytes()
+    template = lib_dir.joinpath('config.protot').text()
 
     if not output_path.isfile() or overwrite:
         output = jinja2.Template(template).render(package=
@@ -485,7 +489,7 @@ def generate_library_main_header(options):
     library_header = library_dir.joinpath('src', '%s.h' % library_dir.name)
     if not library_header.isdir():
         library_header.parent.makedirs_p()
-    with library_header.open('wb') as output:
+    with library_header.open('w') as output:
         output.write('''
 #ifndef ___{module_name_upper}__H___
 #define ___{module_name_upper}__H___

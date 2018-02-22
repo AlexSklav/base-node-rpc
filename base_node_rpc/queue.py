@@ -1,14 +1,15 @@
+from __future__ import absolute_import
 import logging
 import time
 from datetime import datetime
-from Queue import Queue
 from threading import Thread
 
+from nadamq.NadaMq import cPacketParser, PACKET_TYPES
+from six.moves import queue
 import blinker
 import json_tricks
-import pandas as pd
 import numpy as np
-from nadamq.NadaMq import cPacketParser, PACKET_TYPES
+import pandas as pd
 
 logger = logging.getLogger(name=__name__)
 
@@ -20,7 +21,7 @@ json_tricks.NumpyEncoder.SHOW_SCALAR_WARNING = False
 class PacketQueueManager(object):
     '''
     Parse data from an input stream and push each complete packet on a
-    :class:`Queue.Queue` according to the type of packet: ``data``, ``ack``, or
+    :class:`queue.Queue` according to the type of packet: ``data``, ``ack``, or
     ``stream``.
 
     Using queues
@@ -69,7 +70,7 @@ class PacketQueueManager(object):
         packet_types = ['data', 'ack', 'stream', 'id_response']
         # Signals to connect to indicating packet received or queue is full.
         self.signals = blinker.Namespace()
-        self.packet_queues = pd.Series([Queue() for t in packet_types],
+        self.packet_queues = pd.Series([queue.Queue() for t in packet_types],
                                        index=packet_types)
         self.high_water_mark = high_water_mark
 
