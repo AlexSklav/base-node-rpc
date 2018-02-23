@@ -20,8 +20,7 @@ class ParseError(Exception):
     pass
 
 
-@asyncio.coroutine
-def read_packet(serial_):
+async def read_packet(serial_):
     '''
     Read a single packet from a serial device.
 
@@ -41,7 +40,7 @@ def read_packet(serial_):
     parser = cPacketParser()
     result = False
     while result is False:
-        character = yield from serial_.read(8 << 10)
+        character = await serial_.read(8 << 10)
         if character:
             result = parser.parse(np.fromstring(character, dtype='uint8'))
         elif parser.error:
