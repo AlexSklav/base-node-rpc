@@ -49,8 +49,50 @@ async def read_packet(serial_):
     return result
 
 
-@asyncio.coroutine
-def _read_device_id(**kwargs):
+async def _request(request, **kwargs):
+    '''
+    Request device identifier from a serial device.
+
+    .. note::
+        Asynchronous co-routine.
+
+    Parameters
+    ----------
+    request : bytes
+        Request to send.
+    timeout : float, optional
+        Number of seconds to wait for response from serial device.
+    **kwargs
+        Keyword arguments to pass to :class:`asyncserial.AsyncSerial`
+        initialization function.
+
+    Returns
+    -------
+    dict
+        Specified :data:`kwargs` updated with ``device_name`` and
+        ``device_version`` items.
+    '''
+    timeout = kwargs.pop('timeout', None)
+    device = kwargs.pop('device', None)
+    if device is None:
+        async_device = asyncserial.AsyncSerial(**kwargs)
+    else:
+        async_device = device
+
+    try:
+        async_device.write(request)
+        done, pending = await asyncio.wait([read_packet(async_device)],
+                                           timeout=timeout)
+        if not done:
+            logger.debug('Timed out waiting for: %s', kwargs)
+            return None
+        return list(done)[0].result()
+    finally:
+        if device is None:
+            async_device.close()
+
+
+async def _read_device_id(**kwargs):
     '''
     Request device identifier from a serial device.
 
@@ -71,19 +113,11 @@ def _read_device_id(**kwargs):
         Specified :data:`kwargs` updated with ``device_name`` and
         ``device_version`` items.
     '''
-    timeout = kwargs.pop('timeout', None)
+    response = await _request(ID_REQUEST, **kwargs)
     result = kwargs.copy()
-    with asyncserial.AsyncSerial(**kwargs) as async_device:
-        async_device.write(ID_REQUEST)
-        done, pending = yield from asyncio.wait([read_packet(async_device)],
-                                                timeout=timeout)
-        if not done:
-            logger.debug('Timed out waiting for: %s', kwargs)
-            return None
-        response = list(done)[0].result().data()
-        result['device_name'], result['device_version'] = \
-            response.strip().split(b'::')
-        return result
+    result['device_name'], result['device_version'] = \
+        response.data().strip().decode('utf8').split('::')
+    return result
 
 
 @asyncio.coroutine
