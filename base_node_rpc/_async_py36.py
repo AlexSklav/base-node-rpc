@@ -1,4 +1,5 @@
 from __future__ import absolute_import
+from concurrent.futures import TimeoutError
 import logging
 import platform
 
@@ -9,6 +10,7 @@ import asyncserial
 import numpy as np
 import pandas as pd
 import serial_device as sd
+import threading
 
 
 logger = logging.getLogger(__name__)
@@ -244,3 +246,169 @@ def read_device_id(**kwargs):
         ``device_version`` items.
     '''
     return _read_device_id(**kwargs)
+
+
+async def _async_serial_keepalive(parent, *args, **kwargs):
+    '''
+    Connect to serial port and automatically try to reconnect if disconnected.
+
+    Parameters
+    ----------
+    parent : AsyncSerialMonitor
+        Serial monitor parent with the following attributes:
+
+         - connected_event : threading.Event()
+            Set when serial connection is established.  Cleared when serial
+            connection is lost.
+        - device : AsyncSerial
+            Set when serial connection is established.
+        - disconnected_event : threading.Event()
+            Set when serial connection is lost.  Cleared when serial
+            connection is established.
+        - stop_event : threading.Event()
+            When set, coroutine serial connection is closed and coroutine
+            exits.
+    *args
+        Passed to :class:`asyncserial.AsyncSerial.__init__`.
+    **kwargs
+        Passed to :class:`asyncserial.AsyncSerial.__init__`.
+    '''
+    port = None
+    parent.connected_event.clear()
+    while not parent.stop_event.wait(.01):
+        try:
+            with asyncserial.AsyncSerial(*args, **kwargs) as async_device:
+                logging.info('connected to %s', async_device.ser.port)
+                parent.disconnected_event.clear()
+                parent.connected_event.set()
+                parent.device = async_device
+                port = async_device.ser.port
+                while async_device.ser.is_open:
+                    try:
+                        async_device.ser.in_waiting
+                    except serial.SerialException:
+                        break
+                    else:
+                        await asyncio.sleep(.01)
+            logging.info('disconnected from %s', port)
+        except serial.SerialException as e:
+            pass
+        parent.disconnected_event.set()
+    parent.connected_event.clear()
+    parent.disconnected_event.set()
+    logging.info('stopped monitoring %s', port)
+
+
+@with_loop
+def async_serial_monitor(parent, *args, **kwargs):
+    return _async_serial_keepalive(parent, *args, **kwargs)
+
+
+class AsyncSerialMonitor(threading.Thread):
+    '''
+    Thread connects to serial port and automatically tries to
+    reconnect if disconnected.
+
+    Can be used as a context manager to automatically release
+    the serial port on exit.
+
+    For example:
+
+    >>> with BaseNodeSerialMonitor(port='COM8') as monitor:
+    >>>     # Wait for serial device to connect.
+    >>>     monitor.connected_event.wait()
+    >>>     print(asyncio.run_coroutine_threadsafe(monitor.device.write('hello, world'), monitor.loop).result())
+
+    Otherwise, the :meth:`stop` method must *explicitly* be called
+    to release the serial connection before it can be connected to
+    by other code.  For example:
+
+    >>> monitor = BaseNodeSerialMonitor(port='COM8')
+    >>> # Wait for serial device to connect.
+    >>> monitor.connected_event.wait()
+    >>> print(asyncio.run_coroutine_threadsafe(monitor.device.write('hello, world'), monitor.loop).result())
+    >>> monitor.stop()
+
+    Attributes
+    ----------
+    loop : asyncio event loop
+        Event loop serial monitor is running under.
+    device : asyncserial.AsyncSerial
+        Reference to *active* serial device reference.
+
+        Note that this reference *MAY* change if serial connection
+        is interrupted and reconnected.
+    connected_event : threading.Event
+        Set when serial connection is established.
+    disconnected_event : threading.Event
+        Set when serial connection is lost.
+    '''
+    def __init__(self, *args, **kwargs):
+        self.args = args
+        self.kwargs = kwargs
+        self.connected_event = threading.Event()
+        self.disconnected_event = threading.Event()
+        self.disconnected_event.set()
+        self.stop_event = threading.Event()
+        self.loop = None
+        self.device = None
+        super(AsyncSerialMonitor, self).__init__()
+        self.daemon = True
+
+    def run(self):
+        if platform.system() == 'Windows':
+            loop = asyncio.ProactorEventLoop()
+            asyncio.set_event_loop(loop)
+        else:
+            loop = asyncio.new_event_loop()
+        self.loop = loop
+        self.kwargs['loop'] = loop
+        async_serial_monitor(self, *self.args, **self.kwargs)
+
+    def stop(self):
+        self.stop_event.set()
+        try:
+            self.device.close()
+        except Exception:
+            pass
+        self.disconnected_event.set()
+
+    def __enter__(self):
+        self.start()
+        return self
+
+    def __exit__(self, exc_type, exc_value, traceback):
+        self.stop()
+
+
+class BaseNodeSerialMonitor(AsyncSerialMonitor):
+    def request(self, request, *args, **kwargs):
+        '''
+        Submit request to serial device and wait for response packet.
+
+        See :meth:`arequest` for async coroutine variant of this method.
+
+        Returns
+        -------
+        nadamq.NadaMq.cPacket
+            Response packet.
+        '''
+        future = asyncio \
+            .run_coroutine_threadsafe(self.arequest(request),
+                                      loop=self.loop)
+        while True:
+            try:
+                return future.result(*args, **kwargs)
+            except TimeoutError:
+                logging.debug('retry after timeout: %s, %s', args, kwargs)
+
+    async def arequest(self, request):
+        '''
+        Submit request to serial device.
+
+        Returns
+        -------
+        awaitable
+            Awaitable
+        '''
+        return await _request(request, device=self.device)
