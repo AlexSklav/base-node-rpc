@@ -140,12 +140,14 @@ def with_loop(func):
     '''
     @wraps(func)
     def wrapped(*args, **kwargs):
-        if platform.system() == 'Windows':
-            loop = asyncio.ProactorEventLoop()
-            asyncio.set_event_loop(loop)
-        else:
-            loop = asyncio.get_event_loop()
-        return loop.run_until_complete(func(**kwargs))
+        loop = kwargs.pop('loop', None)
+        if loop is None:
+            if platform.system() == 'Windows':
+                loop = asyncio.ProactorEventLoop()
+                asyncio.set_event_loop(loop)
+            else:
+                loop = asyncio.get_event_loop()
+        return loop.run_until_complete(func(*args, **kwargs))
     return wrapped
 
 
