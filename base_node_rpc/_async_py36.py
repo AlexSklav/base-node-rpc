@@ -4,6 +4,7 @@ import logging
 import platform
 
 from functools import wraps
+from logging_helpers import _L
 from nadamq.NadaMq import cPacket, cPacketParser, PACKET_TYPES
 import asyncio
 import asyncserial
@@ -86,7 +87,7 @@ async def _request(request, **kwargs):
         done, pending = await asyncio.wait([read_packet(async_device)],
                                            timeout=timeout)
         if not done:
-            logger.debug('Timed out waiting for: %s', kwargs)
+            _L().debug('Timed out waiting for: %s', kwargs)
             return None
         return list(done)[0].result()
     finally:
@@ -278,7 +279,7 @@ async def _async_serial_keepalive(parent, *args, **kwargs):
     while not parent.stop_event.wait(.01):
         try:
             with asyncserial.AsyncSerial(*args, **kwargs) as async_device:
-                logging.info('connected to %s', async_device.ser.port)
+                _L().info('connected to %s', async_device.ser.port)
                 parent.disconnected_event.clear()
                 parent.connected_event.set()
                 parent.device = async_device
@@ -290,13 +291,13 @@ async def _async_serial_keepalive(parent, *args, **kwargs):
                         break
                     else:
                         await asyncio.sleep(.01)
-            logging.info('disconnected from %s', port)
+            _L().info('disconnected from %s', port)
         except serial.SerialException as e:
             pass
         parent.disconnected_event.set()
     parent.connected_event.clear()
     parent.disconnected_event.set()
-    logging.info('stopped monitoring %s', port)
+    _L().info('stopped monitoring %s', port)
 
 
 @with_loop
@@ -371,7 +372,7 @@ class AsyncSerialMonitor(threading.Thread):
             self.device.close()
         except Exception:
             pass
-        self.disconnected_event.set()
+        self.disconnected_event.wait()
 
     def __enter__(self):
         self.start()
@@ -400,7 +401,7 @@ class BaseNodeSerialMonitor(AsyncSerialMonitor):
             try:
                 return future.result(*args, **kwargs)
             except TimeoutError:
-                logging.debug('retry after timeout: %s, %s', args, kwargs)
+                _L().debug('retry after timeout: %s, %s', args, kwargs)
 
     async def arequest(self, request):
         '''

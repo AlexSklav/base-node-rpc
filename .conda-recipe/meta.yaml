@@ -75,6 +75,7 @@ requirements:
     - future
     #: .. versionadded:: 0.41
     - json-tricks >=3.8.0
+    - logging-helpers >=0.3
     #: .. versionadded:: 0.30
     #: .. versionchanged:: 0.38
     - nadamq >=0.14
@@ -106,6 +107,7 @@ requirements:
     - blinker
     #: .. versionadded:: 0.41
     - json-tricks >=3.8.0
+    - logging-helpers >=0.3
     #: .. versionadded:: 0.30
     #: .. versionchanged:: 0.38
     - nadamq >=0.14
