@@ -52,7 +52,7 @@ class ProxyBase(object):
     def __init__(self, buffer_bounds_check=True, high_water_mark=10,
                  timeout_s=10, **kwargs):
         '''
-        .. versionchanged:: X.X.X
+        .. versionchanged:: 0.43
             Ignore extra keyword arguments (rather than throwing an exception).
         '''
         self._buffer_bounds_check = buffer_bounds_check
