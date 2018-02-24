@@ -50,7 +50,11 @@ class ProxyBase(object):
     host_package_name = None
 
     def __init__(self, buffer_bounds_check=True, high_water_mark=10,
-                 timeout_s=10):
+                 timeout_s=10, **kwargs):
+        '''
+        .. versionchanged:: 0.43
+            Ignore extra keyword arguments (rather than throwing an exception).
+        '''
         self._buffer_bounds_check = buffer_bounds_check
         self._buffer_size = None
         self._packet_queue_manager = \
