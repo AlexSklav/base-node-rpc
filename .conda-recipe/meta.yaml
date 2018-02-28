@@ -19,7 +19,6 @@ package:
 
 #: .. versionadded:: 0.42
 build:
-  noarch: true
   script:
     # Generate Arduino `library.properties` file
     - python -m paver generate_arduino_library_properties
