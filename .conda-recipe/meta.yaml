@@ -61,7 +61,7 @@ build:
 
 requirements:
   build:
-    - platformio-helpers
+    - platformio-helpers >=0.6
     #: .. versionchanged:: 0.42
     - python {{ python }}
 
