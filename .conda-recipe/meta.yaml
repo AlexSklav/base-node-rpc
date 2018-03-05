@@ -26,12 +26,10 @@ build:
     - python -m paver generate_all_code
     # Copy Arduino library to Conda include directory
     - python -c
-        "import os.path; import os; import shutil;
+        "import os.path; import os; import shutil; import platformio_helpers as pioh;
         lib_src_dir = os.path.join(os.environ['SRC_DIR'], 'lib',
                                    '{{ LIB_NAME }}');
-        install_dir = os.path.join(os.environ['PREFIX'],
-                                   'Library',  # [win]
-                                   'include', 'Arduino', '{{ LIB_NAME }}');
+        install_dir = pioh.conda_arduino_include_path().joinpath('{{ LIB_NAME }}');
         shutil.copytree(lib_src_dir, install_dir);
         "
     # Build firmware
@@ -40,9 +38,7 @@ build:
     - python -c
         "import os.path; import os; import shutil;
         SRC_DIR = os.environ['SRC_DIR'];
-        PIO_BIN_DIR = os.path.join(os.environ['PREFIX'],
-                                   'Library',  # [win]
-                                   'bin', 'platformio', '{{ PKG_NAME }}');
+        PIO_BIN_DIR = pioh.conda_bin_path().joinpath('{{ PKG_NAME }}');
         created = (None if os.path.isdir(PIO_BIN_DIR)
                    else os.makedirs(PIO_BIN_DIR));
         shutil.copy2(os.path.join(SRC_DIR, 'platformio.ini'),

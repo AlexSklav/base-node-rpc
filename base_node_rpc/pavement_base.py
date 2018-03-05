@@ -39,38 +39,6 @@ def _get_module_name(properties):
         return properties['package_name'].replace('-', '_')
 
 
-def conda_prefix():
-    '''
-    Returns
-    -------
-    path_helpers.path
-        Path to Conda environment prefix corresponding to running Python
-        executable.
-
-        Return ``None`` if not running in a Conda environment.
-    '''
-    if any(['continuum analytics, inc.' in sys.version.lower(),
-            'conda' in sys.version.lower()]):
-        # Assume running under Conda.
-        if 'CONDA_PREFIX' in os.environ:
-            conda_prefix = ph.path(os.environ['CONDA_PREFIX'])
-        else:
-            # Infer Conda prefix as parent directory of Python executable.
-            conda_prefix = ph.path(sys.executable).parent.realpath()
-    else:
-        # Assume running under Conda.
-        conda_prefix = None
-    return conda_prefix
-
-
-def conda_arduino_include_path():
-    if platform.system() in ('Linux', 'Darwin'):
-        return conda_prefix().joinpath('include', 'Arduino')
-    elif platform.system() == 'Windows':
-        return conda_prefix().joinpath('Library', 'include', 'Arduino')
-    raise 'Unsupported platform: %s' % platform.system()
-
-
 def get_base_classes_and_headers(options, lib_dir, sketch_dir):
     '''
     Return ordered list of classes to scan for method discovery, along with a
@@ -89,9 +57,8 @@ def get_base_classes_and_headers(options, lib_dir, sketch_dir):
     input_classes = ['BaseNode'] + base_classes + rpc_classes
 
     # Assume `base-node-rpc` has already been installed as a Conda package.
-    base_node_lib_dir = conda_arduino_include_path().joinpath('BaseNodeRpc',
-                                                              'src',
-                                                              'BaseNodeRpc')
+    base_node_lib_dir = (pioh.conda_arduino_include_path()
+                         .joinpath('BaseNodeRpc', 'src', 'BaseNodeRpc'))
     if not base_node_lib_dir.isdir():
         # Library directory not found in Conda include paths since
         # `base-node-rpc` has **not** been installed as a Conda package.
@@ -154,7 +121,7 @@ def generate_validate_header(py_proto_module_name, sketch_dir):
         # Add stub `stdint.h` header to includes path.
         stdint_stub_path = (ph.path(__file__).parent.joinpath('StdIntStub')
                             .realpath())
-        c_array_defs_path = (conda_arduino_include_path()
+        c_array_defs_path = (pioh.conda_arduino_include_path()
                              .joinpath('CArrayDefs'))
         args = ['-DSTDINT_STUB']
         include_paths = [stdint_stub_path, lib_dir.realpath(),
@@ -275,7 +242,7 @@ def generate_command_processor_header(options):
         # Add stub `stdint.h` header to includes path.
         stdint_stub_path = (ph.path(__file__).parent.joinpath('StdIntStub')
                             .realpath())
-        c_array_defs_path = (conda_arduino_include_path()
+        c_array_defs_path = (pioh.conda_arduino_include_path()
                              .joinpath('CArrayDefs'))
         args = ['-DSTDINT_STUB']
         include_paths = [stdint_stub_path, lib_dir.realpath(),
@@ -325,7 +292,8 @@ class SerialProxy(SerialProxyMixin, Proxy):
     # Add stub `stdint.h` header to includes path.
     stdint_stub_path = (ph.path(__file__).parent.joinpath('StdIntStub')
                         .realpath())
-    c_array_defs_path = conda_arduino_include_path().joinpath('CArrayDefs')
+    c_array_defs_path = (pioh.conda_arduino_include_path()
+                         .joinpath('CArrayDefs'))
     args = ['-DSTDINT_STUB']
     include_paths = [stdint_stub_path, lib_dir.realpath(), c_array_defs_path]
     args += ['-I%s' % p for p in include_paths]
