@@ -76,8 +76,8 @@ outputs:
       - Lib/site-packages/{{ MODULE_NAME }}
     requirements:
       build:
-        - arduino-rpc-dev >=1.13
-        - arduino-rpc >=1.13
+        - arduino-rpc-dev >=1.14
+        - arduino-rpc >=1.14
         #: .. versionadded:: 0.38
         #: .. versionchanged:: 0.42
         - asyncserial >=0.2  # [py27]
@@ -108,8 +108,8 @@ outputs:
         - serial-device >=0.11
       run:
         - {{ pin_subpackage(PKG_NAME + '-dev', max_pin='x.x') }}
-        - arduino-rpc-dev >=1.13
-        - arduino-rpc >=1.13
+        - arduino-rpc-dev >=1.14
+        - arduino-rpc >=1.14
         #: .. versionadded:: 0.38
         #: .. versionchanged:: 0.42
         - asyncserial >=0.2  # [py27]
