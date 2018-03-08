@@ -61,7 +61,7 @@ build:
 
 requirements:
   build:
-    - platformio-helpers >=0.6
+    - platformio-helpers >=0.7
     #: .. versionchanged:: 0.42
     - python {{ python }}
 
@@ -76,8 +76,8 @@ outputs:
       - Lib/site-packages/{{ MODULE_NAME }}
     requirements:
       build:
-        - arduino-rpc-dev >=1.10
-        - arduino-rpc >=1.10
+        - arduino-rpc-dev >=1.13
+        - arduino-rpc >=1.13
         #: .. versionadded:: 0.38
         #: .. versionchanged:: 0.42
         - asyncserial >=0.2  # [py27]
@@ -86,30 +86,30 @@ outputs:
         - blinker
         - future
         #: .. versionadded:: 0.41
-        - json-tricks >=3.8.0
+        - json-tricks >=3.11.3
         - logging-helpers >=0.3
         #: .. versionadded:: 0.30
         #: .. versionchanged:: 0.38
-        - nadamq >=0.14
+        - nadamq >=0.18
         #: .. versionadded:: 0.42
-        - or-event
+        - or-event >=0.2.1
         - paver
         - pip
-        - platformio
-        - platformio-framework-arduinoavr
-        - platformio-framework-arduinoteensy
-        - platformio-helpers >=0.4
-        - platformio-tool-avrdude >=1.60300.1
-        - platformio-tool-scons
-        - platformio-tool-teensy
+        - platformio >=3.5.2b2.post19
+        - platformio-framework-arduinoavr >=1.10620.2
+        - platformio-framework-arduinoteensy >=1.141.0
+        - platformio-helpers >=0.7
+        - platformio-tool-avrdude >=1.60300.2
+        - platformio-tool-scons >=3.30001.0
+        - platformio-tool-teensy >=1.141.0
         - platformio-toolchain-atmelavr >=1.40902.1
         - platformio-toolchain-gccarmnoneeabi ==1.50401.0
         #: .. versionchanged:: 0.38
-        - serial-device >=0.9
+        - serial-device >=0.11
       run:
         - {{ pin_subpackage(PKG_NAME + '-dev', max_pin='x.x') }}
-        - arduino-rpc-dev >=1.10
-        - arduino-rpc >=1.10
+        - arduino-rpc-dev >=1.13
+        - arduino-rpc >=1.13
         #: .. versionadded:: 0.38
         #: .. versionchanged:: 0.42
         - asyncserial >=0.2  # [py27]
@@ -117,21 +117,21 @@ outputs:
         #: .. versionadded:: 0.41
         - blinker
         #: .. versionadded:: 0.41
-        - json-tricks >=3.8.0
+        - json-tricks >=3.11.3
         - logging-helpers >=0.3
         #: .. versionadded:: 0.30
         #: .. versionchanged:: 0.38
-        - nadamq >=0.14
+        - nadamq >=0.18
         #: .. versionadded:: 0.42
-        - or-event
+        - or-event >=0.2.1
         #: .. versionchanged:: 0.42
         - python {{ python }}
-        - platformio-helpers >=0.4
-        - platformio-tool-avrdude
-        - platformio-tool-scons
-        - platformio-tool-teensy
+        - platformio-helpers >=0.7
+        - platformio-tool-avrdude >=1.60300.2
+        - platformio-tool-scons >=3.30001.0
+        - platformio-tool-teensy >=1.141.0
         #: .. versionchanged:: 0.38
-        - serial-device >=0.9
+        - serial-device >=0.11
     test:
       imports:
         - base_node_rpc
