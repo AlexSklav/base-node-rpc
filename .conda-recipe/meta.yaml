@@ -71,7 +71,6 @@ outputs:
     files:
       - share
   - name: {{ PKG_NAME }}
-    noarch: python
     files:
       - Lib/site-packages/{{ MODULE_NAME }}
     requirements:
@@ -80,8 +79,8 @@ outputs:
         - arduino-rpc >=1.14
         #: .. versionadded:: 0.38
         #: .. versionchanged:: 0.42
-        - asyncserial >=0.2  # [py27]
-        - asyncserial  # [py3k]
+        #: .. versionchanged:: 0.46.1
+        - asyncserial >=0.2.3
         #: .. versionadded:: 0.41
         - blinker
         - future
@@ -112,8 +111,8 @@ outputs:
         - arduino-rpc >=1.14
         #: .. versionadded:: 0.38
         #: .. versionchanged:: 0.42
-        - asyncserial >=0.2  # [py27]
-        - asyncserial  # [py3k]
+        #: .. versionchanged:: 0.46.1
+        - asyncserial >=0.2.3
         #: .. versionadded:: 0.41
         - blinker
         #: .. versionadded:: 0.41
