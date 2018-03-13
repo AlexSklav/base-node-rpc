@@ -62,8 +62,7 @@ build:
 requirements:
   build:
     - platformio-helpers >=0.7
-    #: .. versionchanged:: 0.42
-    - python {{ python }}
+    - python
 
 outputs:
   - name: {{ PKG_NAME }}-dev
@@ -123,8 +122,7 @@ outputs:
         - nadamq >=0.18
         #: .. versionadded:: 0.42
         - or-event >=0.2.1
-        #: .. versionchanged:: 0.42
-        - python {{ python }}
+        - python
         - platformio-helpers >=0.7
         - platformio-tool-avrdude >=1.60300.2
         - platformio-tool-scons >=3.30001.0
