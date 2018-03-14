@@ -2,28 +2,20 @@ from __future__ import absolute_import
 from concurrent.futures import TimeoutError
 import logging
 import platform
+import threading
 
-from functools import wraps
 from logging_helpers import _L
-from nadamq.NadaMq import (cPacket, cPacketParser, PACKET_TYPES,
-                           PACKET_NAME_BY_TYPE)
+from nadamq.NadaMq import cPacketParser
 import asyncio
 import asyncserial
-import blinker
 import numpy as np
 import pandas as pd
-import serial
 import serial_device as sd
-import threading
+
+from ._async_common import ParseError, ID_REQUEST
 
 
 logger = logging.getLogger(__name__)
-
-ID_REQUEST = cPacket(type_=PACKET_TYPES.ID_REQUEST).tostring()
-
-
-class ParseError(Exception):
-    pass
 
 
 async def read_packet(serial_):
@@ -127,7 +119,7 @@ async def _read_device_id(**kwargs):
 
 
 @asyncio.coroutine
-def _available_devices(ports, baudrate=9600, timeout=None):
+def _available_devices(ports=None, baudrate=9600, timeout=None):
     '''
     Request list of available serial devices, including device identifier (if
     available).
@@ -137,9 +129,11 @@ def _available_devices(ports, baudrate=9600, timeout=None):
 
     Parameters
     ----------
-    ports : pd.DataFrame
+    ports : pd.DataFrame, optional
         Table of ports to query (in format returned by
         :func:`serial_device.comports`).
+
+        **Default: all available ports**
     baudrate : int, optional
         Baud rate to use for device identifier request.
 
@@ -153,7 +147,14 @@ def _available_devices(ports, baudrate=9600, timeout=None):
     pd.DataFrame
         Specified :data:`ports` table updated with ``baudrate``,
         ``device_name``, and ``device_version`` columns.
+
+
+    .. versionchanged:: 0.47
+        Make ports argument optional.
     '''
+    if ports is None:
+        ports = sd.comports(only_available=True)
+
     if not ports.shape[0]:
         # No ports
         return ports
@@ -168,88 +169,6 @@ def _available_devices(ports, baudrate=9600, timeout=None):
     else:
         df_results = ports
     return df_results
-
-
-def with_loop(func):
-    '''
-    Decorator to run function within an asyncio event loop.
-
-    .. notes::
-        Uses :class:`asyncio.ProactorEventLoop` on Windows to support, e.g.,
-        serial device events.
-    '''
-    @wraps(func)
-    def wrapped(*args, **kwargs):
-        loop = kwargs.pop('loop', None)
-        if loop is None:
-            if platform.system() == 'Windows':
-                loop = asyncio.ProactorEventLoop()
-                asyncio.set_event_loop(loop)
-            else:
-                loop = asyncio.get_event_loop()
-        return loop.run_until_complete(func(*args, **kwargs))
-    return wrapped
-
-
-@with_loop
-def available_devices(baudrate=9600, ports=None, timeout=None):
-    '''
-    Request list of available serial devices, including device identifier (if
-    available).
-
-    .. note::
-        Synchronous wrapper for :func:`_available_devices`.
-
-    Parameters
-    ----------
-    baudrate : int, optional
-        Baud rate to use for device identifier request.
-
-        **Default: 9600**
-    ports : pd.DataFrame
-        Table of ports to query (in format returned by
-        :func:`serial_device.comports`).
-
-        **Default: all available ports**
-    timeout : float, optional
-        Maximum number of seconds to wait for a response from each serial
-        device.
-
-    Returns
-    -------
-    pd.DataFrame
-        Specified :data:`ports` table updated with ``baudrate``,
-        ``device_name``, and ``device_version`` columns.
-    '''
-    if ports is None:
-        ports = sd.comports(only_available=True)
-
-    return _available_devices(ports, baudrate=baudrate, timeout=timeout)
-
-
-@with_loop
-def read_device_id(**kwargs):
-    '''
-    Request device identifier from a serial device.
-
-    .. note::
-        Synchronous wrapper for :func:`_read_device_id`.
-
-    Parameters
-    ----------
-    timeout : float, optional
-        Number of seconds to wait for response from serial device.
-    **kwargs
-        Keyword arguments to pass to :class:`asyncserial.AsyncSerial`
-        initialization function.
-
-    Returns
-    -------
-    dict
-        Specified :data:`kwargs` updated with ``device_name`` and
-        ``device_version`` items.
-    '''
-    return _read_device_id(**kwargs)
 
 
 async def _async_serial_keepalive(parent, *args, **kwargs):
