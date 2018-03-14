@@ -121,11 +121,12 @@ def available_devices(baudrate=9600, ports=None, timeout=None):
     pd.DataFrame
         Specified :data:`ports` table updated with ``baudrate``,
         ``device_name``, and ``device_version`` columns.
-    '''
-    if ports is None:
-        ports = sd.comports(only_available=True)
 
-    return _available_devices(ports, baudrate=baudrate, timeout=timeout)
+
+    .. versionchanged:: X.X.X
+        Make ports argument optional.
+    '''
+    return _available_devices(ports=ports, baudrate=baudrate, timeout=timeout)
 
 
 @with_loop

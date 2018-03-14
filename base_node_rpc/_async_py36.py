@@ -10,6 +10,7 @@ import asyncio
 import asyncserial
 import numpy as np
 import pandas as pd
+import serial_device as sd
 
 from ._async_common import ParseError, ID_REQUEST
 
@@ -118,7 +119,7 @@ async def _read_device_id(**kwargs):
 
 
 @asyncio.coroutine
-def _available_devices(ports, baudrate=9600, timeout=None):
+def _available_devices(ports=None, baudrate=9600, timeout=None):
     '''
     Request list of available serial devices, including device identifier (if
     available).
@@ -128,9 +129,11 @@ def _available_devices(ports, baudrate=9600, timeout=None):
 
     Parameters
     ----------
-    ports : pd.DataFrame
+    ports : pd.DataFrame, optional
         Table of ports to query (in format returned by
         :func:`serial_device.comports`).
+
+        **Default: all available ports**
     baudrate : int, optional
         Baud rate to use for device identifier request.
 
@@ -144,7 +147,14 @@ def _available_devices(ports, baudrate=9600, timeout=None):
     pd.DataFrame
         Specified :data:`ports` table updated with ``baudrate``,
         ``device_name``, and ``device_version`` columns.
+
+
+    .. versionchanged:: X.X.X
+        Make ports argument optional.
     '''
+    if ports is None:
+        ports = sd.comports(only_available=True)
+
     if not ports.shape[0]:
         # No ports
         return ports
