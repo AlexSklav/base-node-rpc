@@ -123,7 +123,7 @@ def available_devices(baudrate=9600, ports=None, timeout=None):
         ``device_name``, and ``device_version`` columns.
 
 
-    .. versionchanged:: X.X.X
+    .. versionchanged:: 0.47
         Make ports argument optional.
     '''
     return _available_devices(ports=ports, baudrate=baudrate, timeout=timeout)

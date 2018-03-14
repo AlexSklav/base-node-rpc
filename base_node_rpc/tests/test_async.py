@@ -8,7 +8,7 @@ else:
     import asyncio
 
 
-#: .. versionadded:: X.X.X
+#: .. versionadded:: 0.47
 def test_run_from_running_loop():
     @asyncio.coroutine
     def foo():
@@ -23,6 +23,6 @@ def test_run_from_running_loop():
     asyncio.set_event_loop(original_loop)
 
 
-#: .. versionadded:: X.X.X
+#: .. versionadded:: 0.47
 def test_run_from_default_loop():
     print(bnra.available_devices())
