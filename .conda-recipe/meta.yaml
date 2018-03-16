@@ -61,7 +61,7 @@ build:
 
 requirements:
   build:
-    - platformio-helpers >=0.7
+    - platformio-helpers >=0.8
     - python
 
 outputs:
@@ -74,8 +74,8 @@ outputs:
       - Lib/site-packages/{{ MODULE_NAME }}
     requirements:
       build:
-        - arduino-rpc-dev >=1.14
-        - arduino-rpc >=1.14
+        - arduino-rpc-dev >=1.15
+        - arduino-rpc >=1.15
         #: .. versionadded:: 0.38
         #: .. versionchanged:: 0.42
         #: .. versionchanged:: 0.46.1
@@ -88,7 +88,7 @@ outputs:
         - logging-helpers >=0.3
         #: .. versionadded:: 0.30
         #: .. versionchanged:: 0.38
-        - nadamq >=0.18
+        - nadamq >=0.19
         #: .. versionadded:: 0.42
         - or-event >=0.2.1
         - paver
@@ -96,7 +96,7 @@ outputs:
         - platformio >=3.5.2b2.post19
         - platformio-framework-arduinoavr >=1.10620.2
         - platformio-framework-arduinoteensy >=1.141.0
-        - platformio-helpers >=0.7
+        - platformio-helpers >=0.8
         - platformio-tool-avrdude >=1.60300.2
         - platformio-tool-scons >=3.30001.0
         - platformio-tool-teensy >=1.141.0
@@ -106,8 +106,8 @@ outputs:
         - serial-device >=0.11
       run:
         - {{ pin_subpackage(PKG_NAME + '-dev', max_pin='x.x') }}
-        - arduino-rpc-dev >=1.14
-        - arduino-rpc >=1.14
+        - arduino-rpc-dev >=1.15
+        - arduino-rpc >=1.15
         #: .. versionadded:: 0.38
         #: .. versionchanged:: 0.42
         #: .. versionchanged:: 0.46.1
@@ -119,11 +119,11 @@ outputs:
         - logging-helpers >=0.3
         #: .. versionadded:: 0.30
         #: .. versionchanged:: 0.38
-        - nadamq >=0.18
+        - nadamq >=0.19
         #: .. versionadded:: 0.42
         - or-event >=0.2.1
         - python
-        - platformio-helpers >=0.7
+        - platformio-helpers >=0.8
         - platformio-tool-avrdude >=1.60300.2
         - platformio-tool-scons >=3.30001.0
         - platformio-tool-teensy >=1.141.0
