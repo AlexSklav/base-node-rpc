@@ -8,6 +8,7 @@ from logging_helpers import _L
 from nadamq.NadaMq import cPacketParser
 import asyncio
 import asyncserial
+import blinker
 import numpy as np
 import pandas as pd
 import serial_device as sd
