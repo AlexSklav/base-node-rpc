@@ -15,6 +15,11 @@ import serial_device as sd
 from ._async_common import ParseError, ID_REQUEST
 
 
+__all__ = ['read_packet', '_request', '_read_device_id', '_available_devices',
+           '_async_serial_keepalive', 'AsyncSerialMonitor',
+           'BaseNodeSerialMonitor']
+
+
 logger = logging.getLogger(__name__)
 
 
