@@ -5,12 +5,14 @@ import platform
 import threading
 
 from logging_helpers import _L
-from nadamq.NadaMq import cPacketParser
+from nadamq.NadaMq import cPacketParser, PACKET_TYPES, PACKET_NAME_BY_TYPE
 import asyncio
 import asyncserial
 import blinker
+import json_tricks
 import numpy as np
 import pandas as pd
+import serial
 import serial_device as sd
 
 from ._async_common import ParseError, ID_REQUEST
