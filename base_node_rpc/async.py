@@ -5,14 +5,13 @@ import platform
 import sys
 import threading
 
-import serial_device as sd
-
 if sys.version_info[0] < 3:
     from ._async_py27 import (asyncio, _available_devices, read_packet,
                               _read_device_id)
 else:
-    from ._async_py36 import (asyncio, _available_devices, read_packet,
-                              _read_device_id)
+    from ._async_py36 import (AsyncSerialMonitor, BaseNodeSerialMonitor,
+                              _async_serial_keepalive, _available_devices,
+                              _read_device_id, _request, asyncio, read_packet)
 
 
 logger = logging.getLogger(__name__)

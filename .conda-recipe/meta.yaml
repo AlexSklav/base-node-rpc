@@ -62,7 +62,36 @@ build:
 requirements:
   build:
     - platformio-helpers >=0.8
-    - python
+    - arduino-rpc-dev >=1.15
+    - arduino-rpc >=1.15
+    #: .. versionadded:: 0.38
+    #: .. versionchanged:: 0.42
+    #: .. versionchanged:: 0.46.1
+    - asyncserial >=0.2.3
+    #: .. versionadded:: 0.41
+    - blinker
+    - future
+    #: .. versionadded:: 0.41
+    - json-tricks >=3.11.3
+    - logging-helpers >=0.3
+    #: .. versionadded:: 0.30
+    #: .. versionchanged:: 0.38
+    - nadamq >=0.19
+    #: .. versionadded:: 0.42
+    - or-event >=0.2.1
+    - paver
+    - pip
+    - platformio >=3.5.2b2.post19
+    - platformio-framework-arduinoavr >=1.10620.2
+    - platformio-framework-arduinoteensy >=1.141.0
+    - platformio-helpers >=0.8
+    - platformio-tool-avrdude >=1.60300.2
+    - platformio-tool-scons >=3.30001.0
+    - platformio-tool-teensy >=1.141.0
+    - platformio-toolchain-atmelavr >=1.40902.1
+    - platformio-toolchain-gccarmnoneeabi ==1.50401.0
+    #: .. versionchanged:: 0.38
+    - serial-device >=0.11
 
 outputs:
   - name: {{ PKG_NAME }}-dev
@@ -73,39 +102,8 @@ outputs:
     files:
       - Lib/site-packages/{{ MODULE_NAME }}
     requirements:
-      build:
-        - arduino-rpc-dev >=1.15
-        - arduino-rpc >=1.15
-        #: .. versionadded:: 0.38
-        #: .. versionchanged:: 0.42
-        #: .. versionchanged:: 0.46.1
-        - asyncserial >=0.2.3
-        #: .. versionadded:: 0.41
-        - blinker
-        - future
-        #: .. versionadded:: 0.41
-        - json-tricks >=3.11.3
-        - logging-helpers >=0.3
-        #: .. versionadded:: 0.30
-        #: .. versionchanged:: 0.38
-        - nadamq >=0.19
-        #: .. versionadded:: 0.42
-        - or-event >=0.2.1
-        - paver
-        - pip
-        - platformio >=3.5.2b2.post19
-        - platformio-framework-arduinoavr >=1.10620.2
-        - platformio-framework-arduinoteensy >=1.141.0
-        - platformio-helpers >=0.8
-        - platformio-tool-avrdude >=1.60300.2
-        - platformio-tool-scons >=3.30001.0
-        - platformio-tool-teensy >=1.141.0
-        - platformio-toolchain-atmelavr >=1.40902.1
-        - platformio-toolchain-gccarmnoneeabi ==1.50401.0
-        #: .. versionchanged:: 0.38
-        - serial-device >=0.11
       run:
-        - {{ pin_subpackage(PKG_NAME + '-dev', max_pin='x.x') }}
+        - {{ pin_subpackage('base-node-rpc-dev', max_pin='x.x') }}
         - arduino-rpc-dev >=1.15
         - arduino-rpc >=1.15
         #: .. versionadded:: 0.38
@@ -122,33 +120,32 @@ outputs:
         - nadamq >=0.19
         #: .. versionadded:: 0.42
         - or-event >=0.2.1
-        - python
         - platformio-helpers >=0.8
         - platformio-tool-avrdude >=1.60300.2
         - platformio-tool-scons >=3.30001.0
         - platformio-tool-teensy >=1.141.0
         #: .. versionchanged:: 0.38
         - serial-device >=0.11
-    test:
-      imports:
-        - base_node_rpc
-        #: .. versionadded:: 0.41
-        - base_node_rpc._version
-        - base_node_rpc.async
-        #: .. versionadded:: 0.41
-        - base_node_rpc.bin.upload
-        #: .. versionadded:: 0.41
-        - base_node_rpc.bootloader_driver
-        #: .. versionadded:: 0.41
-        - base_node_rpc.intel_hex
-        #: .. versionadded:: 0.41
-        - base_node_rpc.node
-        #: .. versionadded:: 0.41
-        - base_node_rpc.protobuf
-        #: .. versionadded:: 0.41
-        - base_node_rpc.proxy
-        #: .. versionadded:: 0.41
-        - base_node_rpc.queue
+      test:
+        imports:
+          - base_node_rpc
+          #: .. versionadded:: 0.41
+          - base_node_rpc._version
+          - base_node_rpc.async
+          #: .. versionadded:: 0.41
+          - base_node_rpc.bin.upload
+          #: .. versionadded:: 0.41
+          - base_node_rpc.bootloader_driver
+          #: .. versionadded:: 0.41
+          - base_node_rpc.intel_hex
+          #: .. versionadded:: 0.41
+          - base_node_rpc.node
+          #: .. versionadded:: 0.41
+          - base_node_rpc.protobuf
+          #: .. versionadded:: 0.41
+          - base_node_rpc.proxy
+          #: .. versionadded:: 0.41
+          - base_node_rpc.queue
 
 about:
   home: https://github.com/wheeler-microfluidics/base-node-rpc
