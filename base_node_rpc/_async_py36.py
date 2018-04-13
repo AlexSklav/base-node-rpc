@@ -1,4 +1,4 @@
-from __future__ import absolute_import
+from __future__ import absolute_import, unicode_literals, print_function
 from concurrent.futures import TimeoutError
 import logging
 import platform
@@ -392,7 +392,7 @@ class BaseNodeSerialMonitor(AsyncSerialMonitor):
                     # support serializing [Numpy arrays and scalars][1].
                     #
                     # [1]: http://json-tricks.readthedocs.io/en/latest/#numpy-arrays
-                    message = json_tricks.loads(packet.data())
+                    message = json_tricks.loads(packet.data().decode('utf8'))
                     self.signals.signal(message['event']).send(message)
                     # Do not add event packets to a queue.  This prevents the
                     # `stream` queue from filling up with rapidly occurring
@@ -400,7 +400,8 @@ class BaseNodeSerialMonitor(AsyncSerialMonitor):
                     continue
                 except Exception:
                     _L().debug('Stream packet contents do not describe an '
-                               'event: %s', packet.data(), exc_info=True)
+                               'event: %s', packet.data().decode('utf8'),
+                               exc_info=True)
 
             if packet.type_ == PACKET_TYPES.DATA:
                 await self._request_queue.put(packet)

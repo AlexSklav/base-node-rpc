@@ -146,7 +146,7 @@ class PacketQueueManager(object):
                     # support serializing [Numpy arrays and scalars][1].
                     #
                     # [1]: http://json-tricks.readthedocs.io/en/latest/#numpy-arrays
-                    message = json_tricks.loads(p.data())
+                    message = json_tricks.loads(p.data().decode('utf8'))
                     self.signals.signal(message['event']).send(message)
                     # Do not add event packets to a queue.  This prevents the
                     # `stream` queue from filling up with rapidly occurring
