@@ -29,9 +29,9 @@ def _data_as_list(data):
         List of integer byte values.
     '''
     if isinstance(data, np.ndarray):
-        data = data.tostring()
+        data = data.tobytes()
     if isinstance(data, six.string_types):
-        data = list(bytes(data.encode('utf8')))
+        data = list(bytes(data))
     return data
 
 
