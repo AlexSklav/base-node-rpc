@@ -40,13 +40,25 @@ async def read_packet(serial_):
 
     Returns
     -------
-    cPacket
-        Packet parsed from data received on serial device.
+    cPacket or None
+        Packet parsed from data received on serial device.  ``None`` is
+        returned if no response was received.
+
+
+    .. versionchanged:: 0.48.4
+        If a serial exception occurs, e.g., there was no response before timing
+        out, return ``None``.
     '''
     parser = cPacketParser()
-    result = False
-    while result is False:
-        character = await serial_.read(8 << 10)
+    result = None
+    while result is None:
+        try:
+            character = await serial_.read(8 << 10)
+        except Exception as exception:
+            if 'handle is invalid' not in str(exception):
+                logger.debug('error communicating with port `%s`: %s',
+                             serial_.ser.port, exception)
+            break
         if character:
             result = parser.parse(np.fromstring(character, dtype='uint8'))
         elif parser.error:
@@ -118,12 +130,17 @@ async def _read_device_id(**kwargs):
     dict
         Specified :data:`kwargs` updated with ``device_name`` and
         ``device_version`` items.
+
+
+    .. versionchanged:: 0.48.4
+        Return ``None`` if there was no response.
     '''
     response = await _request(ID_REQUEST, **kwargs)
-    result = kwargs.copy()
-    result['device_name'], result['device_version'] = \
-        response.data().strip().decode('utf8').split('::')
-    return result
+    if response is not None:
+        result = kwargs.copy()
+        result['device_name'], result['device_version'] = \
+            response.data().strip().decode('utf8').split('::')
+        return result
 
 
 @asyncio.coroutine

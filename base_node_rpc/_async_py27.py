@@ -29,13 +29,25 @@ def read_packet(serial_):
 
     Returns
     -------
-    cPacket
-        Packet parsed from data received on serial device.
+    cPacket or None
+        Packet parsed from data received on serial device.  ``None`` is
+        returned if no response was received.
+
+
+    .. versionchanged:: 0.48.4
+        If a serial exception occurs, e.g., there was no response before timing
+        out, return ``None``.
     '''
     parser = cPacketParser()
     result = False
     while result is False:
-        character = yield asyncio.From(serial_.read(8 << 10))
+        try:
+            character = yield asyncio.From(serial_.read(8 << 10))
+        except Exception as exception:
+            if 'handle is invalid' not in str(exception):
+                logger.debug('error communicating with port `%s`: %s',
+                             serial_.ser.port, exception)
+            break
         result = parser.parse(np.fromstring(character, dtype='uint8'))
         if parser.error:
             # Error parsing packet.
@@ -112,7 +124,7 @@ def _available_devices(ports=None, baudrate=9600, timeout=None):
         ``device_name``, and ``device_version`` columns.
 
 
-    .. versionchanged:: X.X.X
+    .. versionchanged:: 0.48.4
         Make ports argument optional.
     '''
     if ports is None:
