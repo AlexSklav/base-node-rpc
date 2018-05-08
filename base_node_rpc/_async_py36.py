@@ -44,9 +44,15 @@ async def read_packet(serial_):
         Packet parsed from data received on serial device.
     '''
     parser = cPacketParser()
-    result = False
-    while result is False:
-        character = await serial_.read(8 << 10)
+    result = None
+    while result is None:
+        try:
+            character = await serial_.read(8 << 10)
+        except Exception as exception:
+            if 'handle is invalid' not in str(exception):
+                logger.debug('error communicating with port `%s`: %s',
+                             serial_.ser.port, exception)
+            break
         if character:
             result = parser.parse(np.fromstring(character, dtype='uint8'))
         elif parser.error:
@@ -120,10 +126,11 @@ async def _read_device_id(**kwargs):
         ``device_version`` items.
     '''
     response = await _request(ID_REQUEST, **kwargs)
-    result = kwargs.copy()
-    result['device_name'], result['device_version'] = \
-        response.data().strip().decode('utf8').split('::')
-    return result
+    if response is not None:
+        result = kwargs.copy()
+        result['device_name'], result['device_version'] = \
+            response.data().strip().decode('utf8').split('::')
+        return result
 
 
 @asyncio.coroutine
