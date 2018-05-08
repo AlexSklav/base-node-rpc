@@ -29,8 +29,14 @@ def read_packet(serial_):
 
     Returns
     -------
-    cPacket
-        Packet parsed from data received on serial device.
+    cPacket or None
+        Packet parsed from data received on serial device.  ``None`` is
+        returned if no response was received.
+
+
+    .. versionchanged:: X.X.X
+        If a serial exception occurs, e.g., there was no response before timing
+        out, return ``None``.
     '''
     parser = cPacketParser()
     result = False

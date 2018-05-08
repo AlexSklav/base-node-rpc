@@ -40,8 +40,14 @@ async def read_packet(serial_):
 
     Returns
     -------
-    cPacket
-        Packet parsed from data received on serial device.
+    cPacket or None
+        Packet parsed from data received on serial device.  ``None`` is
+        returned if no response was received.
+
+
+    .. versionchanged:: X.X.X
+        If a serial exception occurs, e.g., there was no response before timing
+        out, return ``None``.
     '''
     parser = cPacketParser()
     result = None
@@ -124,6 +130,10 @@ async def _read_device_id(**kwargs):
     dict
         Specified :data:`kwargs` updated with ``device_name`` and
         ``device_version`` items.
+
+
+    .. versionchanged:: X.X.X
+        Return ``None`` if there was no response.
     '''
     response = await _request(ID_REQUEST, **kwargs)
     if response is not None:
