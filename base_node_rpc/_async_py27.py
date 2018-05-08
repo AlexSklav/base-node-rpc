@@ -34,7 +34,7 @@ def read_packet(serial_):
         returned if no response was received.
 
 
-    .. versionchanged:: X.X.X
+    .. versionchanged:: 0.48.4
         If a serial exception occurs, e.g., there was no response before timing
         out, return ``None``.
     '''
@@ -124,7 +124,7 @@ def _available_devices(ports=None, baudrate=9600, timeout=None):
         ``device_name``, and ``device_version`` columns.
 
 
-    .. versionchanged:: X.X.X
+    .. versionchanged:: 0.48.4
         Make ports argument optional.
     '''
     if ports is None:

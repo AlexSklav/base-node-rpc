@@ -45,7 +45,7 @@ async def read_packet(serial_):
         returned if no response was received.
 
 
-    .. versionchanged:: X.X.X
+    .. versionchanged:: 0.48.4
         If a serial exception occurs, e.g., there was no response before timing
         out, return ``None``.
     '''
@@ -132,7 +132,7 @@ async def _read_device_id(**kwargs):
         ``device_version`` items.
 
 
-    .. versionchanged:: X.X.X
+    .. versionchanged:: 0.48.4
         Return ``None`` if there was no response.
     '''
     response = await _request(ID_REQUEST, **kwargs)
