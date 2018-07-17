@@ -62,8 +62,8 @@ build:
 requirements:
   build:
     - platformio-helpers >=0.8
-    - arduino-rpc-dev >=1.15
-    - arduino-rpc >=1.15
+    - arduino-rpc-dev >=1.16
+    - arduino-rpc >=1.16
     #: .. versionadded:: 0.38
     #: .. versionchanged:: 0.42
     #: .. versionchanged:: 0.46.1
@@ -104,8 +104,8 @@ outputs:
     requirements:
       run:
         - {{ pin_subpackage('base-node-rpc-dev', max_pin='x.x') }}
-        - arduino-rpc-dev >=1.15
-        - arduino-rpc >=1.15
+        - arduino-rpc-dev >=1.16
+        - arduino-rpc >=1.16
         #: .. versionadded:: 0.38
         #: .. versionchanged:: 0.42
         #: .. versionchanged:: 0.46.1
