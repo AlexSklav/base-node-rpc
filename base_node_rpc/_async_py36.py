@@ -1,5 +1,6 @@
 from __future__ import absolute_import, unicode_literals, print_function
 from concurrent.futures import TimeoutError
+import functools as ft
 import logging
 import platform
 import threading
@@ -285,6 +286,11 @@ class AsyncSerialMonitor(threading.Thread):
         Set when serial connection is established.
     disconnected_event : threading.Event
         Set when serial connection is lost.
+
+
+    .. versionchanged:: 0.50
+        Add `serial_signals` signal namespace and emit ``connected`` and
+        ``disconnected`` signals when corresponding threading events are set.
     '''
     def __init__(self, *args, **kwargs):
         self.args = args
@@ -295,6 +301,24 @@ class AsyncSerialMonitor(threading.Thread):
         self.stop_event = threading.Event()
         self.loop = None
         self.device = None
+
+        self.serial_signals = blinker.Namespace()
+
+        def wrapper(f, signal_name):
+            f()
+            self.serial_signals.signal(signal_name, {'event': signal_name})
+
+        def connected_wrapper(f):
+            f()
+            self.serial_signals.signal('connected', {'event': 'connected',
+                                                     'device': self.device})
+
+        self.connected_event.set = ft.partial(connected_wrapper,
+                                              self.connected_event.set)
+        self.disconnected_event.set = ft.partial(wrapper,
+                                                 self.disconnected_event.set,
+                                                 'disconnected')
+
         super(AsyncSerialMonitor, self).__init__()
         self.daemon = True
 
