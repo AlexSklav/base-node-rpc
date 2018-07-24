@@ -13,6 +13,7 @@ from or_event import OrEvent
 from six.moves import map
 from six.moves import range
 from six.moves import queue
+import blinker
 import serial
 import serial_device as sd
 import serial_device.threaded
@@ -244,6 +245,10 @@ class SerialProxyMixin(object):
             Test identity using :func:`read_device_id` function, with fallback
             to :data:`self.properties['package_name']` for devices that do not
             respond with :data:`ID_RESPONSE` packet.
+
+        .. versionchanged:: X.X.X
+            Add `serial_signals` signal namespace and emit ``connected`` and
+            ``disconnected`` signals when corresponding events occur.
         '''
         port = kwargs.pop('port', None)
         baudrate = kwargs.pop('baudrate', 115200)
@@ -253,6 +258,7 @@ class SerialProxyMixin(object):
                           ' in future releases.', DeprecationWarning)
             kwargs.pop('retry_count', None)
 
+        self.serial_signals = blinker.Namespace()
         self.ignore = kwargs.pop('ignore', None)
         self._settling_time_s = kwargs.pop('settling_time_s', 0)
 
@@ -344,6 +350,9 @@ class SerialProxyMixin(object):
         .. versionchanged:: 0.40.3
             Fix case where single :data:`port` is specified explicitly with
             multiple devices available.
+        .. versionchanged:: X.X.X
+            Emit ``connected`` and ``disconnected`` signals in the
+            `serial_signals` namespace when corresponding events occur.
         '''
         if port is None and self.port:
             port = self.port
@@ -380,15 +389,23 @@ class SerialProxyMixin(object):
                     # Device identity has been previously verified.
                     # Must be reconnecting after lost connection.
                     parent.reconnection_made(self)
+                parent.serial_signals.signal('connected').send({'event':
+                                                                'connected',
+                                                                'device':
+                                                                transport})
 
             def data_received(self, data):
                 # New data received from serial port.  Parse using queue
                 # manager.
                 parent._packet_queue_manager.parse(data)
+                parent.serial_signals.signal('data_received')\
+                    .send({'event': 'data_received', 'data': data})
 
             def connection_lost(self, exception):
                 super(PacketProtocol, self).connection_lost(exception)
                 parent.connection_lost(self, exception)
+                parent.serial_signals.signal('disconnected')\
+                    .send({'event': 'disconnected', 'exception': exception})
 
         # Look up device information for all available ports.
         device_name = getattr(self, 'device_name', None)
