@@ -246,7 +246,7 @@ class SerialProxyMixin(object):
             to :data:`self.properties['package_name']` for devices that do not
             respond with :data:`ID_RESPONSE` packet.
 
-        .. versionchanged:: X.X.X
+        .. versionchanged:: 0.50
             Add `serial_signals` signal namespace and emit ``connected`` and
             ``disconnected`` signals when corresponding events occur.
         '''
@@ -350,7 +350,7 @@ class SerialProxyMixin(object):
         .. versionchanged:: 0.40.3
             Fix case where single :data:`port` is specified explicitly with
             multiple devices available.
-        .. versionchanged:: X.X.X
+        .. versionchanged:: 0.50
             Emit ``connected`` and ``disconnected`` signals in the
             `serial_signals` namespace when corresponding events occur.
         '''

@@ -288,7 +288,7 @@ class AsyncSerialMonitor(threading.Thread):
         Set when serial connection is lost.
 
 
-    .. versionchanged:: X.X.X
+    .. versionchanged:: 0.50
         Add `serial_signals` signal namespace and emit ``connected`` and
         ``disconnected`` signals when corresponding threading events are set.
     '''
