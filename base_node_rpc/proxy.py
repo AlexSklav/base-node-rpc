@@ -249,6 +249,9 @@ class SerialProxyMixin(object):
         .. versionchanged:: 0.50
             Add `serial_signals` signal namespace and emit ``connected`` and
             ``disconnected`` signals when corresponding events occur.
+
+        .. versionchanged:: X.X.X
+            Add thread-safety to `_send_command` method using lock.
         '''
         port = kwargs.pop('port', None)
         baudrate = kwargs.pop('baudrate', 115200)
@@ -263,6 +266,8 @@ class SerialProxyMixin(object):
         self._settling_time_s = kwargs.pop('settling_time_s', 0)
 
         self.serial_thread = None
+        self._command_lock = threading.Lock()
+
         super(SerialProxyMixin, self).__init__(**kwargs)
 
         # Event to indicate that device has been connected to and correctly
@@ -499,6 +504,10 @@ class SerialProxyMixin(object):
 
     def _send_command(self, packet, timeout_s=None,
                       poll=sd.threaded.POLL_QUEUES):
+        '''
+        .. versionchanged:: X.X.X
+            Add thread-safety using lock.
+        '''
         if timeout_s is None:
             timeout_s = self._timeout_s
 
@@ -506,17 +515,19 @@ class SerialProxyMixin(object):
             raise IOError('Packet size %s bytes too large.' %
                           (len(packet.data()) - self.buffer_size))
 
-        # Flush outstanding data packets.
-        for p in range(self.queues['data'].qsize()):
-            self.queues['data'].get()
+        with self._command_lock:
+            # Flush outstanding data packets.
+            for p in range(self.queues['data'].qsize()):
+                self.queues['data'].get()
 
-        try:
-            timestamp, response = (self.serial_thread
-                                   .request(self.queues['data'],
-                                            packet.tostring(),
-                                            timeout_s=timeout_s, poll=poll))
-        except queue.Empty:
-            raise IOError('Did not receive response.')
+            try:
+                timestamp, response = (self.serial_thread
+                                       .request(self.queues['data'],
+                                                packet.tostring(),
+                                                timeout_s=timeout_s,
+                                                poll=poll))
+            except queue.Empty:
+                raise IOError('Did not receive response.')
         return response
 
 
