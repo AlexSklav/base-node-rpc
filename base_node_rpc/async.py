@@ -1,6 +1,6 @@
 from __future__ import absolute_import
 from functools import wraps
-import logging
+from logging_helpers import _L
 import platform
 import sys
 import threading
@@ -12,9 +12,6 @@ else:
     from ._async_py36 import (AsyncSerialMonitor, BaseNodeSerialMonitor,
                               _async_serial_keepalive, _available_devices,
                               _read_device_id, _request, asyncio, read_packet)
-
-
-logger = logging.getLogger(__name__)
 
 
 def new_file_event_loop():
@@ -53,16 +50,16 @@ def with_loop(func):
 
         thread_required = False
         if loop.is_running():
-            logger.debug('Event loop is already running.')
+            _L().debug('Event loop is already running.')
             thread_required = True
         elif all([platform.system() == 'Windows',
                   not isinstance(loop, asyncio.ProactorEventLoop)]):
-            logger.debug('`ProactorEventLoop` required, not `%s`'
-                         'loop in background thread.', type(loop))
+            _L().debug('`ProactorEventLoop` required, not `%s` loop in '
+                       'background thread.', type(loop))
             thread_required = True
 
         if thread_required:
-            logger.debug('Execute new loop in background thread.')
+            _L().debug('Execute new loop in background thread.')
             finished = threading.Event()
 
             def _run(generator):
@@ -76,6 +73,9 @@ def with_loop(func):
                 else:
                     finished.result = result
                     finished.error = None
+                finally:
+                    loop.close()
+                    _L().debug('closed event loop')
                 finished.set()
             thread = threading.Thread(target=_run,
                                       args=(func(*args, **kwargs), ))
@@ -86,7 +86,7 @@ def with_loop(func):
                 raise finished.error
             return finished.result
 
-        logger.debug('Execute in exiting event loop in main thread')
+        _L().debug('Execute in exiting event loop in main thread')
         return loop.run_until_complete(func(**kwargs))
     return wrapped
 
