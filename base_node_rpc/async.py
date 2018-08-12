@@ -150,4 +150,5 @@ def read_device_id(**kwargs):
         Specified :data:`kwargs` updated with ``device_name`` and
         ``device_version`` items.
     '''
-    return _read_device_id(**kwargs)
+    timeout = kwargs.pop('timeout', None)
+    return asyncio.wait_for(_read_device_id(**kwargs), timeout=timeout)
