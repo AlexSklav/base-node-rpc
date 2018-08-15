@@ -73,7 +73,7 @@ def _read_device_id(**kwargs):
         ``device_version`` items.
 
 
-    .. versionchanged:: X.X.X
+    .. versionchanged:: 0.51.1
         Remove `timeout` argument in favour of using `asyncio` timeout
         features.  Discard any incoming packets that are not of type
         ``ID_RESPONSE``.
