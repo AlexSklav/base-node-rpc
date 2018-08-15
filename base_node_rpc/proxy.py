@@ -250,7 +250,7 @@ class SerialProxyMixin(object):
             Add `serial_signals` signal namespace and emit ``connected`` and
             ``disconnected`` signals when corresponding events occur.
 
-        .. versionchanged:: X.X.X
+        .. versionchanged:: 0.51
             Add thread-safety to `_send_command` method using lock.
         '''
         port = kwargs.pop('port', None)
@@ -505,7 +505,7 @@ class SerialProxyMixin(object):
     def _send_command(self, packet, timeout_s=None,
                       poll=sd.threaded.POLL_QUEUES):
         '''
-        .. versionchanged:: X.X.X
+        .. versionchanged:: 0.51
             Add thread-safety using lock.
         '''
         if timeout_s is None:

@@ -1,7 +1,7 @@
 from __future__ import absolute_import
-import logging
 
-from nadamq.NadaMq import cPacketParser
+from logging_helpers import _L
+from nadamq.NadaMq import cPacketParser, PACKET_TYPES
 import asyncserial
 import numpy as np
 import pandas as pd
@@ -9,9 +9,6 @@ import serial_device as sd
 import trollius as asyncio
 
 from ._async_common import ParseError, ID_REQUEST
-
-
-logger = logging.getLogger(__name__)
 
 
 @asyncio.coroutine
@@ -45,8 +42,8 @@ def read_packet(serial_):
             character = yield asyncio.From(serial_.read(8 << 10))
         except Exception as exception:
             if 'handle is invalid' not in str(exception):
-                logger.debug('error communicating with port `%s`: %s',
-                             serial_.ser.port, exception)
+                _L().debug('error communicating with port `%s`',
+                           serial_.ser.port, exc_info=True)
             break
         result = parser.parse(np.fromstring(character, dtype='uint8'))
         if parser.error:
@@ -65,8 +62,6 @@ def _read_device_id(**kwargs):
 
     Parameters
     ----------
-    timeout : float, optional
-        Number of seconds to wait for response from serial device.
     **kwargs
         Keyword arguments to pass to :class:`asyncserial.AsyncSerial`
         initialization function.
@@ -76,20 +71,26 @@ def _read_device_id(**kwargs):
     dict
         Specified :data:`kwargs` updated with ``device_name`` and
         ``device_version`` items.
+
+
+    .. versionchanged:: 0.51.1
+        Remove `timeout` argument in favour of using `asyncio` timeout
+        features.  Discard any incoming packets that are not of type
+        ``ID_RESPONSE``.
     '''
-    timeout = kwargs.pop('timeout', None)
     result = kwargs.copy()
     with asyncserial.AsyncSerial(**kwargs) as async_device:
         async_device.write(ID_REQUEST)
-        done, pending = \
-            yield asyncio.From(asyncio.wait([read_packet(async_device)],
-                                            timeout=timeout))
-        if not done:
-            logger.debug('Timed out waiting for: %s', kwargs)
-            raise asyncio.Return(None)
-        response = list(done)[0].result().data()
+        while True:
+            packet = yield asyncio.From(asyncio
+                                        .From(read_packet(async_device)))
+            if not hasattr(packet, 'type_'):
+                # Error reading packet from serial device.
+                raise RuntimeError('Error reading packet from serial device.')
+            elif packet.type_ == PACKET_TYPES.ID_RESPONSE:
+                break
         result['device_name'], result['device_version'] = \
-            response.strip().split('::')
+            packet.data().split('::')
         raise asyncio.Return(result)
 
 
@@ -133,9 +134,9 @@ def _available_devices(ports=None, baudrate=9600, timeout=None):
     if not ports.shape[0]:
         # No ports
         raise asyncio.Return(ports)
-    futures = [_read_device_id(port=name_i, baudrate=baudrate, timeout=timeout)
+    futures = [_read_device_id(port=name_i, baudrate=baudrate)
                for name_i in ports.index]
-    done, pending = yield asyncio.From(asyncio.wait(futures))
+    done, pending = yield asyncio.From(asyncio.wait(futures, timeout=timeout))
     results = [task_i.result() for task_i in done
                if task_i.result() is not None]
     if results:
