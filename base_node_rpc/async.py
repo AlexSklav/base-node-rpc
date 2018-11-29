@@ -92,7 +92,7 @@ def with_loop(func):
 
 
 @with_loop
-def available_devices(baudrate=9600, ports=None, timeout=None):
+def available_devices(baudrate=9600, ports=None, timeout=None, **kwargs):
     '''
     Request list of available serial devices, including device identifier (if
     available).
@@ -114,6 +114,8 @@ def available_devices(baudrate=9600, ports=None, timeout=None):
     timeout : float, optional
         Maximum number of seconds to wait for a response from each serial
         device.
+    **kwargs
+        Keyword arguments to pass to `_available_devices()` function.
 
     Returns
     -------
@@ -124,8 +126,11 @@ def available_devices(baudrate=9600, ports=None, timeout=None):
 
     .. versionchanged:: 0.47
         Make ports argument optional.
+    .. versionchanged:: 0.51.2
+        Pass extra keyword arguments to `_available_devices()` function.
     '''
-    return _available_devices(ports=ports, baudrate=baudrate, timeout=timeout)
+    return _available_devices(ports=ports, baudrate=baudrate, timeout=timeout,
+                              **kwargs)
 
 
 @with_loop

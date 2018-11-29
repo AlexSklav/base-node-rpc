@@ -163,7 +163,7 @@ class I2cProxyMixin(object):
         pass
 
 
-def serial_ports(device_name=None, timeout=5., allow_multiple=False):
+def serial_ports(device_name=None, timeout=5., allow_multiple=False, **kwargs):
     '''
     Parameters
     ----------
@@ -179,6 +179,8 @@ def serial_ports(device_name=None, timeout=5., allow_multiple=False):
         serial port.
     allow_multiple : bool, optional
         Allow multiple devices with the same name.
+    **kwargs
+        Keyword arguments to pass to `available_devices()` function.
 
     Returns
     -------
@@ -191,6 +193,8 @@ def serial_ports(device_name=None, timeout=5., allow_multiple=False):
     .. versionadded:: 0.40
     .. versionchanged:: 0.40.3
         Add :data:`allow_multiple` argument.
+    .. versionchanged:: 0.51.2
+        Pass extra keyword arguments to `available_devices()` function.
     '''
     if device_name is None:
         # No device name specified in base class.
@@ -199,7 +203,7 @@ def serial_ports(device_name=None, timeout=5., allow_multiple=False):
         # Device name specified in base class.
         # Only return serial ports with matching device name in ``ID_RESPONSE``
         # packet.
-        df_comports = available_devices(timeout=timeout)
+        df_comports = available_devices(timeout=timeout, **kwargs)
         if 'device_name' not in df_comports:
             # No devices found with matching name.
             raise DeviceNotFound('No named devices found.')
@@ -358,6 +362,11 @@ class SerialProxyMixin(object):
         .. versionchanged:: 0.50
             Emit ``connected`` and ``disconnected`` signals in the
             `serial_signals` namespace when corresponding events occur.
+        .. versionchanged:: 0.51.2
+            Use specified ``baudrate`` _and_ ``settling_time_s`` to query
+            device ID.  This is required to support devices that cannot
+            communicate using the default baudrate of 9600, e.g.,
+            ``pro8MHzatmega328``.
         '''
         if port is None and self.port:
             port = self.port
@@ -418,12 +427,14 @@ class SerialProxyMixin(object):
         if isinstance(port, six.string_types):
             # Single port was explicitly specified.
             df_comports = serial_ports(device_name=device_name,
-                                       timeout=settling_time_s,
+                                       baudrate=baudrate,
+                                       settling_time_s=settling_time_s,
                                        allow_multiple=True)
             ports = [port]
         else:
             df_comports = serial_ports(device_name=device_name,
-                                       timeout=settling_time_s)
+                                       settling_time_s=settling_time_s,
+                                       baudrate=baudrate)
             if port is None:
                 ports = df_comports.index.tolist()
             else:
@@ -438,7 +449,9 @@ class SerialProxyMixin(object):
 
         for port_i in ports:
             # Read device ID.
-            device_id = read_device_id(port=port_i, timeout=settling_time_s)
+            device_id = read_device_id(port=port_i, timeout=2 * settling_time_s,
+                                       settling_time_s=settling_time_s,
+                                       baudrate=baudrate)
 
             if device_id is not None and device_name is not None:
                 if device_id.get('device_name') != device_name:

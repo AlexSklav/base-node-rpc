@@ -62,6 +62,8 @@ def _read_device_id(**kwargs):
 
     Parameters
     ----------
+    settling_time_s : float, optional
+        Time to wait before writing device ID request to serial port.
     **kwargs
         Keyword arguments to pass to :class:`asyncserial.AsyncSerial`
         initialization function.
@@ -77,13 +79,16 @@ def _read_device_id(**kwargs):
         Remove `timeout` argument in favour of using `asyncio` timeout
         features.  Discard any incoming packets that are not of type
         ``ID_RESPONSE``.
+    .. versionchanged:: 0.51.2
+        Add ``settling_time_s`` keyword argument.
     '''
+    settling_time_s = kwargs.pop('settling_time_s', 0)
     result = kwargs.copy()
     with asyncserial.AsyncSerial(**kwargs) as async_device:
+        yield asyncio.From(asyncio.sleep(settling_time_s))
         async_device.write(ID_REQUEST)
         while True:
-            packet = yield asyncio.From(asyncio
-                                        .From(read_packet(async_device)))
+            packet = yield asyncio.From(read_packet(async_device))
             if not hasattr(packet, 'type_'):
                 # Error reading packet from serial device.
                 raise RuntimeError('Error reading packet from serial device.')
@@ -95,7 +100,8 @@ def _read_device_id(**kwargs):
 
 
 @asyncio.coroutine
-def _available_devices(ports=None, baudrate=9600, timeout=None):
+def _available_devices(ports=None, baudrate=9600, timeout=None,
+                       settling_time_s=0.):
     '''
     Request list of available serial devices, including device identifier (if
     available).
@@ -117,6 +123,8 @@ def _available_devices(ports=None, baudrate=9600, timeout=None):
     timeout : float, optional
         Maximum number of seconds to wait for a response from each serial
         device.
+    settling_time_s : float, optional
+        Time to wait before writing device ID request to serial port.
 
     Returns
     -------
@@ -127,6 +135,8 @@ def _available_devices(ports=None, baudrate=9600, timeout=None):
 
     .. versionchanged:: 0.48.4
         Make ports argument optional.
+    .. versionchanged:: 0.51.2
+        Add ``settling_time_s`` keyword argument.
     '''
     if ports is None:
         ports = sd.comports(only_available=True)
@@ -134,7 +144,8 @@ def _available_devices(ports=None, baudrate=9600, timeout=None):
     if not ports.shape[0]:
         # No ports
         raise asyncio.Return(ports)
-    futures = [_read_device_id(port=name_i, baudrate=baudrate)
+    futures = [_read_device_id(port=name_i, baudrate=baudrate,
+                               settling_time_s=settling_time_s)
                for name_i in ports.index]
     done, pending = yield asyncio.From(asyncio.wait(futures, timeout=timeout))
     results = [task_i.result() for task_i in done
