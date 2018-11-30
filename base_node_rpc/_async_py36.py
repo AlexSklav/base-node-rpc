@@ -1,3 +1,8 @@
+'''
+.. versionchanged:: 0.51.3
+    Port latest functions from `_async_py27` to make `available_devices()`
+    behavior consistent between Python 2.7 and Python 3.6+.
+'''
 from __future__ import absolute_import, unicode_literals, print_function
 from concurrent.futures import TimeoutError
 import functools as ft
@@ -19,7 +24,7 @@ import serial_device as sd
 from ._async_common import ParseError, ID_REQUEST
 
 
-__all__ = ['read_packet', '_request', '_read_device_id', '_available_devices',
+__all__ = ['read_packet', '_read_device_id', '_available_devices',
            '_async_serial_keepalive', 'AsyncSerialMonitor',
            'BaseNodeSerialMonitor']
 
@@ -51,64 +56,20 @@ async def read_packet(serial_):
         out, return ``None``.
     '''
     parser = cPacketParser()
-    result = None
-    while result is None:
+    result = False
+    while result is False:
         try:
             character = await serial_.read(8 << 10)
         except Exception as exception:
             if 'handle is invalid' not in str(exception):
-                logger.debug('error communicating with port `%s`: %s',
-                             serial_.ser.port, exception)
+                _L().debug('error communicating with port `%s`',
+                           serial_.ser.port, exc_info=True)
             break
-        if character:
-            result = parser.parse(np.fromstring(character, dtype='uint8'))
-        elif parser.error:
+        result = parser.parse(np.fromstring(character, dtype='uint8'))
+        if parser.error:
             # Error parsing packet.
             raise ParseError('Error parsing packet.')
     return result
-
-
-async def _request(request, **kwargs):
-    '''
-    Request device identifier from a serial device.
-
-    .. note::
-        Asynchronous co-routine.
-
-    Parameters
-    ----------
-    request : bytes
-        Request to send.
-    timeout : float, optional
-        Number of seconds to wait for response from serial device.
-    **kwargs
-        Keyword arguments to pass to :class:`asyncserial.AsyncSerial`
-        initialization function.
-
-    Returns
-    -------
-    dict
-        Specified :data:`kwargs` updated with ``device_name`` and
-        ``device_version`` items.
-    '''
-    timeout = kwargs.pop('timeout', None)
-    device = kwargs.pop('device', None)
-    if device is None:
-        async_device = asyncserial.AsyncSerial(**kwargs)
-    else:
-        async_device = device
-
-    try:
-        async_device.write(request)
-        done, pending = await asyncio.wait([read_packet(async_device)],
-                                           timeout=timeout)
-        if not done:
-            _L().debug('Timed out waiting for: %s', kwargs)
-            return None
-        return list(done)[0].result()
-    finally:
-        if device is None:
-            async_device.close()
 
 
 async def _read_device_id(**kwargs):
@@ -120,8 +81,8 @@ async def _read_device_id(**kwargs):
 
     Parameters
     ----------
-    timeout : float, optional
-        Number of seconds to wait for response from serial device.
+    settling_time_s : float, optional
+        Time to wait before writing device ID request to serial port.
     **kwargs
         Keyword arguments to pass to :class:`asyncserial.AsyncSerial`
         initialization function.
@@ -133,19 +94,32 @@ async def _read_device_id(**kwargs):
         ``device_version`` items.
 
 
-    .. versionchanged:: 0.48.4
-        Return ``None`` if there was no response.
+    .. versionchanged:: 0.51.1
+        Remove `timeout` argument in favour of using `asyncio` timeout
+        features.  Discard any incoming packets that are not of type
+        ``ID_RESPONSE``.
+    .. versionchanged:: 0.51.2
+        Add ``settling_time_s`` keyword argument.
     '''
-    response = await _request(ID_REQUEST, **kwargs)
-    if response is not None:
-        result = kwargs.copy()
+    settling_time_s = kwargs.pop('settling_time_s', 0)
+    result = kwargs.copy()
+    with asyncserial.AsyncSerial(**kwargs) as async_device:
+        await asyncio.sleep(settling_time_s)
+        async_device.write(ID_REQUEST)
+        while True:
+            packet = await read_packet(async_device)
+            if not hasattr(packet, 'type_'):
+                # Error reading packet from serial device.
+                raise RuntimeError('Error reading packet from serial device.')
+            elif packet.type_ == PACKET_TYPES.ID_RESPONSE:
+                break
         result['device_name'], result['device_version'] = \
-            response.data().strip().decode('utf8').split('::')
+            packet.data().split(b'::')
         return result
 
 
-@asyncio.coroutine
-def _available_devices(ports=None, baudrate=9600, timeout=None):
+async def _available_devices(ports=None, baudrate=9600, timeout=None,
+                             settling_time_s=0.):
     '''
     Request list of available serial devices, including device identifier (if
     available).
@@ -167,6 +141,8 @@ def _available_devices(ports=None, baudrate=9600, timeout=None):
     timeout : float, optional
         Maximum number of seconds to wait for a response from each serial
         device.
+    settling_time_s : float, optional
+        Time to wait before writing device ID request to serial port.
 
     Returns
     -------
@@ -175,8 +151,10 @@ def _available_devices(ports=None, baudrate=9600, timeout=None):
         ``device_name``, and ``device_version`` columns.
 
 
-    .. versionchanged:: 0.47
+    .. versionchanged:: 0.48.4
         Make ports argument optional.
+    .. versionchanged:: 0.51.2
+        Add ``settling_time_s`` keyword argument.
     '''
     if ports is None:
         ports = sd.comports(only_available=True)
@@ -184,9 +162,10 @@ def _available_devices(ports=None, baudrate=9600, timeout=None):
     if not ports.shape[0]:
         # No ports
         return ports
-    futures = [_read_device_id(port=name_i, baudrate=baudrate, timeout=timeout)
+    futures = [_read_device_id(port=name_i, baudrate=baudrate,
+                               settling_time_s=settling_time_s)
                for name_i in ports.index]
-    done, pending = yield from asyncio.wait(futures)
+    done, pending = await asyncio.wait(futures, timeout=timeout)
     results = [task_i.result() for task_i in done
                if task_i.result() is not None]
     if results:

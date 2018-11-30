@@ -11,7 +11,7 @@ if sys.version_info[0] < 3:
 else:
     from ._async_py36 import (AsyncSerialMonitor, BaseNodeSerialMonitor,
                               _async_serial_keepalive, _available_devices,
-                              _read_device_id, _request, asyncio, read_packet)
+                              _read_device_id, asyncio, read_packet)
 
 
 def new_file_event_loop():
