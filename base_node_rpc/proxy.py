@@ -235,7 +235,11 @@ class SerialProxyMixin(object):
             Useful, for example, to allow Arduino boards that reset upon
             connection to initialize before attempting serial communication.
 
-            By default, :data:`settling_time_s` is assumed to be zero.
+            Default: 25 ms (i.e., ``0.025``).
+
+
+            .. versionchanged:: 0.51.4
+                Change default from 0 s to 25 ms.
         retry_count : int, optional
             Deprecated as of 0.40.
 
@@ -267,7 +271,7 @@ class SerialProxyMixin(object):
 
         self.serial_signals = blinker.Namespace()
         self.ignore = kwargs.pop('ignore', None)
-        self._settling_time_s = kwargs.pop('settling_time_s', 0)
+        self._settling_time_s = kwargs.pop('settling_time_s', 0.025)
 
         self.serial_thread = None
         self._command_lock = threading.Lock()
