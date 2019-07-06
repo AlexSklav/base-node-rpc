@@ -40,11 +40,12 @@ def read_packet(serial_):
     while result is False:
         try:
             character = yield asyncio.From(serial_.read(8 << 10))
-        except Exception as exception:
+        except (AttributeError, serial.SerialException):
             if 'handle is invalid' not in str(exception):
                 _L().debug('error communicating with port `%s`',
                            serial_.ser.port, exc_info=True)
-            break
+            await asyncio.sleep(.01)
+            continue
         result = parser.parse(np.fromstring(character, dtype='uint8'))
         if parser.error:
             # Error parsing packet.

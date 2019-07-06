@@ -62,8 +62,9 @@ async def read_packet(serial_):
             character = await serial_.read(8 << 10)
         except Exception as exception:
             if 'handle is invalid' not in str(exception):
-                _L().debug('error communicating with port `%s`',
-                           serial_.ser.port, exc_info=True)
+                port = serial_.ser.port if hasattr(serial_, 'port') else '??'
+                _L().debug('error communicating with port `%s`', port,
+                           exc_info=True)
             break
         result = parser.parse(np.fromstring(character, dtype='uint8'))
         if parser.error:
@@ -394,18 +395,13 @@ class BaseNodeSerialMonitor(AsyncSerialMonitor):
         return await self._request_queue.get()
 
     async def read_packets(self):
-        _L().debug('start listening for packets')
-        while not self.stop_event.is_set():
-            _L().debug('waiting for packet')
-            try:
-                packet = await self.read_packet()
-            except Exception:
-                if self.stop_event.is_set():
-                    break
-                _L().debug('error reading packet', exc_info=True)
-                await asyncio.sleep(.01)
-                continue
+        L = _L()
+        L.debug('start listening for packets')
 
+        async def on_packet_received(packet):
+            L.debug('packet received: %s', PACKET_NAME_BY_TYPE[packet.type_])
+            L.debug('parsed packet: `%s`', np.fromstring(packet.data(),
+                                                         dtype='uint8'))
             if packet.type_ == PACKET_TYPES.STREAM:
                 try:
                     # XXX Use `json_tricks` rather than standard `json` to
@@ -417,46 +413,51 @@ class BaseNodeSerialMonitor(AsyncSerialMonitor):
                     # Do not add event packets to a queue.  This prevents the
                     # `stream` queue from filling up with rapidly occurring
                     # events.
-                    continue
                 except Exception:
-                    _L().debug('Stream packet contents do not describe an '
-                               'event: %s', packet.data().decode('utf8'),
-                               exc_info=True)
-
-            if packet.type_ == PACKET_TYPES.DATA:
+                    L.debug('Stream packet contents do not describe an '
+                            'event: %s', packet.data().decode('utf8'),
+                            exc_info=True)
+            elif packet.type_ == PACKET_TYPES.DATA:
                 await self._request_queue.put(packet)
 
             for packet_type_i in ('data', 'ack', 'stream', 'id_response'):
                 if packet.type_ == getattr(PACKET_TYPES, packet_type_i.upper()):
                     self.signals.signal('%s-received' %
                                         packet_type_i).send(packet)
-        _L().debug('stop listening for packets')
 
-    async def read_packet(self):
-        '''
-        Read a single packet from a serial device.
-
-        .. note::
-            Asynchronous co-routine.
-
-        Returns
-        -------
-        cPacket
-            Packet parsed from data received on serial device.
-        '''
         parser = cPacketParser()
-        result = False
-        while result is False:
+        while not self.stop_event.is_set():
+            L.debug('waiting for packet')
             try:
-                character = await self.device.read(8 << 10)
-            except (AttributeError, serial.SerialException):
+                result = False
+                while result is False:
+                    try:
+                        data = await self.device.read(8 << 10)
+                    except (AttributeError, serial.SerialException):
+                        await asyncio.sleep(.01)
+                        continue
+
+                    if not data:
+                        continue
+
+                    L.debug('read: `%s`', data)
+                    buffer_ = np.frombuffer(data, dtype='uint8').copy()
+                    for i in range(len(buffer_)):
+                        result = parser.parse(buffer_[i:i + 1])
+                        if result is not False:
+                            packet_str = np.fromstring(result.tostring(),
+                                                       dtype='uint8')
+                            packet = cPacketParser().parse(packet_str)
+                            await on_packet_received(packet)
+                            parser.reset()
+                        elif parser.error:
+                            parser.reset()
+            except Exception:
+                if self.stop_event.is_set():
+                    break
+                L.debug('error reading packet', exc_info=True)
                 await asyncio.sleep(.01)
                 continue
 
-            if character:
-                result = parser.parse(np.fromstring(character, dtype='uint8'))
-            elif parser.error:
-                # Error parsing packet.
-                raise ParseError('Error parsing packet.')
-        _L().debug('packet received: %s', PACKET_NAME_BY_TYPE[result.type_])
-        return result
+        L.debug('stop listening for packets')
+
