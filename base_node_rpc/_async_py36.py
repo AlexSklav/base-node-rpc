@@ -399,9 +399,11 @@ class BaseNodeSerialMonitor(AsyncSerialMonitor):
         L.debug('start listening for packets')
 
         async def on_packet_received(packet):
-            L.debug('packet received: %s', PACKET_NAME_BY_TYPE[packet.type_])
-            L.debug('parsed packet: `%s`', np.fromstring(packet.data(),
-                                                         dtype='uint8'))
+            if L.getEffectiveLevel() <= logging.DEBUG:
+                L.debug('packet received: %s',
+                        PACKET_NAME_BY_TYPE[packet.type_])
+                L.debug('parsed packet: `%s`',
+                        np.fromstring(packet.data(), dtype='uint8'))
             if packet.type_ == PACKET_TYPES.STREAM:
                 try:
                     # XXX Use `json_tricks` rather than standard `json` to
