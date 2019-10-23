@@ -44,7 +44,7 @@ def read_packet(serial_):
             if 'handle is invalid' not in str(exception):
                 _L().debug('error communicating with port `%s`',
                            serial_.ser.port, exc_info=True)
-            await asyncio.sleep(.01)
+            yield asyncio.From(asyncio.sleep(.01))
             continue
         result = parser.parse(np.fromstring(character, dtype='uint8'))
         if parser.error:
