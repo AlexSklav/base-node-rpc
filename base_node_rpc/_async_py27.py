@@ -7,6 +7,7 @@ import numpy as np
 import pandas as pd
 import serial_device as sd
 import trollius as asyncio
+import serial
 
 from ._async_common import ParseError, ID_REQUEST
 
@@ -40,7 +41,7 @@ def read_packet(serial_):
     while result is False:
         try:
             character = yield asyncio.From(serial_.read(8 << 10))
-        except (AttributeError, serial.SerialException):
+        except (AttributeError, serial.SerialException) as exception:
             if 'handle is invalid' not in str(exception):
                 _L().debug('error communicating with port `%s`',
                            serial_.ser.port, exc_info=True)
