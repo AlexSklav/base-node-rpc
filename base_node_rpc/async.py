@@ -156,5 +156,4 @@ def read_device_id(**kwargs):
         ``device_version`` items.
     '''
     timeout = kwargs.pop('timeout', None)
-    yield asyncio.From(asyncio.wait_for(_read_device_id(**kwargs),
-                                        timeout=timeout))
+    return asyncio.wait_for(_read_device_id(**kwargs), timeout=timeout)
