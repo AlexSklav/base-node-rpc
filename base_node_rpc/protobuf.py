@@ -1,30 +1,29 @@
-from __future__ import absolute_import
-from __future__ import print_function
+# coding: utf-8
+import jinja2
 import warnings
 
 import pandas as pd
-from arduino_rpc.protobuf import (extract_callback_data,
-                                  get_protobuf_fields_frame)
+
+from arduino_rpc.protobuf import extract_callback_data, get_protobuf_fields_frame
 from arduino_rpc.code_gen import get_multilevel_method_sig_frame
 
 
-def get_handler_sig_info_frame(header, class_, *args, **kwargs):
-    '''
+def get_handler_sig_info_frame(header, class_, *args, **kwargs) -> pd.DataFrame:
+    """
     Return `pandas.DataFrame` containing method signature information for methods
     matching the following pattern:
 
         bool on_<field ['__' field]*>_changed(...)
 
     Methods are only not included if they cannot be validated.
-    '''
+    """
     prefix = kwargs.pop('prefix', '')
 
     frame = get_multilevel_method_sig_frame(header, class_, *args, **kwargs)
 
     # Extract change event handler method signatures.
     df_sig_handlers = frame[((frame.ndims == 0) | (frame.ndims.isin([None]))) &
-                            (frame.method_name.str.match(r'on_' + prefix +
-                                                         r'.+_changed'))]
+                            (frame.method_name.str.match(r'on_' + prefix + r'.+_changed'))]
 
     # Validate signal handlers.
     #
@@ -37,24 +36,21 @@ def get_handler_sig_info_frame(header, class_, *args, **kwargs):
     #    - `on_<field(s)>_changed(T orig_value, T new_value)`.
     frames = []
     for (i, method_name, return_type), df_i in (df_sig_handlers
-                                                .groupby(['method_i',
-                                                          'method_name',
-                                                          'return_atom_type'])):
+            .groupby(['method_i', 'method_name', 'return_atom_type'])):
         arg_count, atom_type = df_i.iloc[0][['arg_count', 'atom_type']]
         if arg_count > 0:
             if not (df_i.atom_type == atom_type).all():
                 warnings.warn('[%d] Skipping method due to mixed argument types.')
                 continue
         if not (df_i.return_atom_type == 'bool').all():
-            warnings.warn('[%d] Skipping method due to incorrect return type '
-                          '(should be `bool`).')
+            warnings.warn('[%d] Skipping method due to incorrect return type (should be `bool`).')
             continue
         frames.append(df_i)
     return pd.concat(frames)
 
 
-def get_handler_template_frame(df_handler_sig, message_type):
-    '''
+def get_handler_template_frame(df_handler_sig, message_type) -> pd.DataFrame:
+    """
     Return a `pandas.DataFrame` containing only the data required to render the
     validator class code for the specified handler method signatures matching
     the supplied Protocol Buffer message type class.
@@ -69,27 +65,22 @@ def get_handler_template_frame(df_handler_sig, message_type):
       - `depth`: The depth of the field in a nested message (depth is 1 for
         single-level message).
       - `field_name`: The name of the Protocol Buffer field.
-    '''
+    """
     frames = []
 
     for (method_name, T, arg_count), df_i in (df_handler_sig
-                                              .groupby(['method_name',
-                                                        'return_atom_type',
-                                                        'arg_count'])):
+            .groupby(['method_name', 'return_atom_type', 'arg_count'])):
         try:
-            df_parents, s_field = extract_callback_data(get_protobuf_fields_frame
-                                                        (message_type), method_name)
-            assert((df_i.iloc[0].atom_type is None) or
-                   (df_i.iloc[0].atom_type == s_field.atom_type))
+            df_parents, s_field = extract_callback_data(get_protobuf_fields_frame(message_type), method_name)
+            assert ((df_i.iloc[0].atom_type is None) or (df_i.iloc[0].atom_type == s_field.atom_type))
         except IndexError:
-            warnings.warn('No message field matching method name: %s' % method_name)
+            warnings.warn(f'No message field matching method name: {method_name}')
             continue
         except AssertionError:
-            warnings.warn('[%s] Handler arg type (%s) does not match message field type (%s)'
-                          % (method_name, df_i.iloc[0].atom_type, s_field.atom_type))
+            warnings.warn(f'[{method_name}] Handler arg type ({df_i.iloc[0].atom_type}) '
+                          f'does not match message field type ({s_field.atom_type})')
             continue
-        tags = (df_parents.iloc[1:]['parent_field'].map(lambda p: p.number).tolist() +
-                [s_field.field_desc.number])
+        tags = df_parents.iloc[1:]['parent_field'].map(lambda p: p.number).tolist() + [s_field.field_desc.number]
         row = df_i.iloc[0].copy()
         row['tags'] = tags
         row['depth'] = len(tags)
@@ -97,30 +88,17 @@ def get_handler_template_frame(df_handler_sig, message_type):
         row['field_name'] = s_field.name
         frames.append(pd.DataFrame([row]))
 
-    return pd.concat(frames)[['method_name', 'camel_name', 'arg_count',
-                              'atom_type', 'tags', 'depth', 'field_name']]
+    return pd.concat(frames)[['method_name', 'camel_name', 'arg_count', 'atom_type', 'tags', 'depth', 'field_name']]
 
 
-def get_handler_validator_class_code(header, class_, message_type, *args,
-                                     **kwargs):
-    '''
+def get_handler_validator_class_code(header, class_, message_type, *args, **kwargs):
+    """
     Return generated C classes for handlers discovered in provided header/class
     matching the name of the supplied Protocol Buffers message type.
 
     __NB__ The code returned by this function is not namespaced, and is
     intended to be included as part of a header file.
-    '''
-    import jinja2
-
-    try:
-        df_handler_sig = get_handler_sig_info_frame(header, class_,
-                                                    prefix=message_type.DESCRIPTOR
-                                                    .name.lower() + '_',
-                                                    *args, **kwargs)
-        df_handlers_template = get_handler_template_frame(df_handler_sig,
-                                                          message_type)
-    except ValueError:
-        df_handlers_template = pd.DataFrame()
+    """
     template = '''
 {%- for i, row in df_handlers.iterrows() -%}
 template <typename NodeT>
@@ -164,12 +142,18 @@ public:{# #}
   }
 };
 '''
+
+    try:
+        df_handler_sig = get_handler_sig_info_frame(header, class_,
+                                                    prefix=message_type.DESCRIPTOR.name.lower() + '_',
+                                                    *args, **kwargs)
+        df_handlers_template = get_handler_template_frame(df_handler_sig, message_type)
+    except ValueError:
+        df_handlers_template = pd.DataFrame()
     return jinja2.Template(template).render(df_handlers=df_handlers_template)
 
 
-def write_handler_validator_header(output_path, package_name, message_name,
-                                   validator_code):
-    import jinja2
+def write_handler_validator_header(output_path, package_name, message_name, validator_code):
 
     template = '''#ifndef ___{{ package_name.upper() }}_{{ message_name.upper() }}_VALIDATE___
 #define ___{{ package_name.upper() }}_{{ message_name.upper() }}_VALIDATE___
@@ -189,4 +173,4 @@ namespace {{ message_name }}_validate {
                                                package_name=package_name,
                                                message_name=message_name),
               file=output)
-        print('Wrote to %s' % output_path)
+        print(f"\t'{output_path.name}' > {output_path}")

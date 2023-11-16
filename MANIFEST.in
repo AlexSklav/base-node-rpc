@@ -1,9 +1,10 @@
 include README.md
-include pavement.py
-include paver-minilib.zip
+include build_flags.py
+include file_handler.py
 include setup.py
-include PROJECT_PREFIX
 recursive-include base_node_rpc *
 recursive-exclude base_node_rpc *.pyc
+exclude .DS_Store
+recursive-exclude base_node_rpc .DS_Store
 include versioneer.py
 include base_node_rpc/_version.py

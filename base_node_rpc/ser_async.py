@@ -1,25 +1,23 @@
-from __future__ import absolute_import
-from functools import wraps
-from logging_helpers import _L
+# coding: utf-8
+import asyncio
 import platform
-import sys
 import threading
 
-if sys.version_info[0] < 3:
-    from ._async_py27 import (asyncio, _available_devices, read_packet,
-                              _read_device_id)
-else:
-    from ._async_py36 import (AsyncSerialMonitor, BaseNodeSerialMonitor,
-                              _async_serial_keepalive, _available_devices,
-                              _read_device_id, asyncio, read_packet)
+import pandas as pd
+
+from functools import wraps
+from typing import Optional, Coroutine
+
+from logging_helpers import _L
+
+from ._async_base import BaseNodeSerialMonitor, _available_devices, _read_device_id
 
 
-def new_file_event_loop():
-    return (asyncio.ProactorEventLoop() if platform.system() == 'Windows'
-            else asyncio.new_event_loop())
+def new_file_event_loop() -> asyncio.AbstractEventLoop:
+    return asyncio.new_event_loop()
 
 
-def ensure_event_loop():
+def ensure_event_loop() -> asyncio.AbstractEventLoop:
     try:
         loop = asyncio.get_event_loop()
     except RuntimeError as e:
@@ -31,8 +29,8 @@ def ensure_event_loop():
     return loop
 
 
-def with_loop(func):
-    '''
+def with_loop(func: callable):
+    """
     Decorator to run function within an asyncio event loop.
 
     .. notes::
@@ -43,7 +41,8 @@ def with_loop(func):
         currently running, or b) *not a :class:`asyncio.ProactorEventLoop`
         instance*, execute function in a new thread running a new
         :class:`asyncio.ProactorEventLoop` instance.
-    '''
+    """
+
     @wraps(func)
     def wrapped(*args, **kwargs):
         loop = ensure_event_loop()
@@ -52,10 +51,9 @@ def with_loop(func):
         if loop.is_running():
             _L().debug('Event loop is already running.')
             thread_required = True
-        elif all([platform.system() == 'Windows',
-                  not isinstance(loop, asyncio.ProactorEventLoop)]):
-            _L().debug('`ProactorEventLoop` required, not `%s` loop in '
-                       'background thread.', type(loop))
+        elif platform.system() == 'Windows':
+            if not isinstance(loop, asyncio.ProactorEventLoop):
+                _L().debug(f'`ProactorEventLoop` required, not `{type(loop)}` loop in background thread.')
             thread_required = True
 
         if thread_required:
@@ -77,8 +75,9 @@ def with_loop(func):
                     loop.close()
                     _L().debug('closed event loop')
                 finished.set()
+
             thread = threading.Thread(target=_run,
-                                      args=(func(*args, **kwargs), ))
+                                      args=(func(*args, **kwargs),))
             thread.daemon = True
             thread.start()
             finished.wait()
@@ -88,12 +87,14 @@ def with_loop(func):
 
         _L().debug('Execute in exiting event loop in main thread')
         return loop.run_until_complete(func(**kwargs))
+
     return wrapped
 
 
 @with_loop
-def available_devices(baudrate=9600, ports=None, timeout=None, **kwargs):
-    '''
+def available_devices(baudrate: Optional[int] = 9600, ports: Optional[pd.DataFrame] = None,
+                      timeout: Optional[float] = None, **kwargs) -> Coroutine:
+    """
     Request list of available serial devices, including device identifier (if
     available).
 
@@ -123,19 +124,19 @@ def available_devices(baudrate=9600, ports=None, timeout=None, **kwargs):
         Specified :data:`ports` table updated with ``baudrate``,
         ``device_name``, and ``device_version`` columns.
 
-
+    Version log
+    -----------
     .. versionchanged:: 0.47
         Make ports argument optional.
     .. versionchanged:: 0.51.2
         Pass extra keyword arguments to `_available_devices()` function.
-    '''
-    return _available_devices(ports=ports, baudrate=baudrate, timeout=timeout,
-                              **kwargs)
+    """
+    return _available_devices(ports=ports, baudrate=baudrate, timeout=timeout, **kwargs)
 
 
 @with_loop
 def read_device_id(**kwargs):
-    '''
+    """
     Request device identifier from a serial device.
 
     .. note::
@@ -144,7 +145,7 @@ def read_device_id(**kwargs):
     Parameters
     ----------
     timeout : float, optional
-        Number of seconds to wait for response from serial device.
+        Number of seconds to wait for response from a serial device.
     **kwargs
         Keyword arguments to pass to :class:`asyncserial.AsyncSerial`
         initialization function.
@@ -154,6 +155,6 @@ def read_device_id(**kwargs):
     dict
         Specified :data:`kwargs` updated with ``device_name`` and
         ``device_version`` items.
-    '''
+    """
     timeout = kwargs.pop('timeout', None)
     return asyncio.wait_for(_read_device_id(**kwargs), timeout=timeout)

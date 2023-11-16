@@ -1,23 +1,23 @@
 '''
 .. versionadded:: v0.33
 '''
-from __future__ import absolute_import
-from __future__ import print_function
-import itertools as it
-import struct
+# coding: utf-8
 import time
+import struct
+import logging
 
-from builtins import bytes
-from six.moves import range
 import numpy as np
-import path_helpers as ph
-import six
+
+from itertools import chain
+from path_helpers import path
+from typing import Union, List, Optional, Dict
 
 from .intel_hex import parse_intel_hex
+from .proxy import ProxyBase
 
 
-def _data_as_list(data):
-    '''
+def _data_as_list(data: Union[List, np.array]) -> List[bytes]:
+    """
     Parameters
     ----------
     data : list or numpy.array or str
@@ -27,52 +27,53 @@ def _data_as_list(data):
     -------
     list
         List of integer byte values.
-    '''
+    """
     if isinstance(data, np.ndarray):
         data = data.tobytes()
-    if isinstance(data, six.string_types):
-        data = list(bytes(data))
+    if isinstance(data, str):
+        data = [ord(char) for char in data]
     return data
 
 
-class TwiBootloader(object):
-    def __init__(self, proxy, bootloader_address=0x29):
-        '''
+class TwiBootloader:
+    def __init__(self, proxy: ProxyBase, bootloader_address: Optional[int] = 0x29):
+        """
         Parameters
         ----------
         proxy : base_node_rpc.Proxy
-        address : int
+        bootloader_address : int
             I2C address of switching board.
-        '''
+        """
         self.proxy = proxy
         self.bootloader_address = bootloader_address
+        self.logger = logging.getLogger(__name__)
 
-    def abort_boot_timeout(self):
-        '''
+    def abort_boot_timeout(self) -> None:
+        """
         Prevent bootloader from automatically starting application code.
-        '''
+        """
         self.proxy.i2c_write(self.bootloader_address, 0x00)
 
-    def start_application(self):
-        '''
+    def start_application(self) -> None:
+        """
         Explicitly start application code.
-        '''
+        """
         self.proxy.i2c_write(self.bootloader_address, [0x01, 0x80])
 
-    def read_bootloader_version(self):
-        '''
+    def read_bootloader_version(self) -> str:
+        """
         Read ``twiboot`` version string.
-        '''
+        """
         self.proxy.i2c_write(self.bootloader_address, 0x01)
         return self.proxy.i2c_read(self.bootloader_address, 16).tostring()
 
-    def read_chip_info(self):
-        '''
+    def read_chip_info(self) -> Dict:
+        """
         Returns
         -------
         dict
             Information about device, including, e.g., sizes of memory regions.
-        '''
+        """
         self.proxy.i2c_write(self.bootloader_address, [0x02, 0x00, 0x00, 0x00])
         data = self.proxy.i2c_read(self.bootloader_address, 8)
         return {
@@ -82,7 +83,7 @@ class TwiBootloader(object):
             'eeprom_size': struct.unpack('>H', data[6:8])[0]
         }
 
-    def read_flash(self, address, n_bytes):
+    def read_flash(self, address: int, n_bytes: int) -> bytes:
         """
         Read one or more flash bytes.
 
@@ -95,11 +96,10 @@ class TwiBootloader(object):
         """
         addrh = address >> 8 & 0xFF
         addrl = address & 0xFF
-        self.proxy.i2c_write(self.bootloader_address, [0x02, 0x01, addrh,
-                                                       addrl])
+        self.proxy.i2c_write(self.bootloader_address, [0x02, 0x01, addrh, addrl])
         return self.proxy.i2c_read(self.bootloader_address, n_bytes)
 
-    def read_eeprom(self, address, n_bytes):
+    def read_eeprom(self, address: int, n_bytes: int) -> bytes:
         """
         Read one or more eeprom bytes
 
@@ -112,11 +112,10 @@ class TwiBootloader(object):
         """
         addrh = address >> 8 & 0xFF
         addrl = address & 0xFF
-        self.proxy.i2c_write(self.bootloader_address, [0x02, 0x02, addrh,
-                                                       addrl])
+        self.proxy.i2c_write(self.bootloader_address, [0x02, 0x02, addrh, addrl])
         return self.proxy.i2c_read(self.bootloader_address, n_bytes)
 
-    def write_flash(self, address, page):
+    def write_flash(self, address: int, page: Union[List, np.array, str]) -> None:
         """
         Write one flash page (128bytes on atmega328p).
 
@@ -136,10 +135,9 @@ class TwiBootloader(object):
         addrh = address >> 8 & 0xFF
         addrl = address & 0xFF
         page = _data_as_list(page)
-        self.proxy.i2c_write(self.bootloader_address, [0x02, 0x01, addrh,
-                                                       addrl] + page)
+        self.proxy.i2c_write(self.bootloader_address, [0x02, 0x01, addrh, addrl] + page)
 
-    def write_eeprom(self, address, data):
+    def write_eeprom(self, address: int, data: Union[List, np.array, str]) -> None:
         """
         Write one or more eeprom bytes.
 
@@ -157,11 +155,11 @@ class TwiBootloader(object):
         addrh = address >> 8 & 0xFF
         addrl = address & 0xFF
         data = _data_as_list(data)
-        self.proxy.i2c_write(self.bootloader_address, [0x02, 0x02, addrh,
-                                                       addrl] + data)
+        self.proxy.i2c_write(self.bootloader_address, [0x02, 0x02, addrh, addrl] + data)
 
-    def write_firmware(self, firmware_path, verify=True, delay_s=0.02):
-        '''
+    def write_firmware(self, firmware_path: str, verify: Optional[bool] = True,
+                       delay_s: Optional[float] = 0.02) -> None:
+        """
         Write `Intel HEX file`__ and split into pages.
 
         __ Intel HEX file: https://en.wikipedia.org/wiki/Intel_HEX
@@ -186,9 +184,11 @@ class TwiBootloader(object):
             Delay is increased exponentially between operations from one
             attempt to the next.
 
+        Version log
+        -----------
         .. versionchanged:: 0.34
             Prior to version 0.34, if a page write failed while writing
-            firmware to flash memory, an exception was raised immeidately.
+            firmware to flash memory, an exception was raised immediately.
             This approach is problematic, as it leaves the flash memory in a
             non-deterministic state which may prevent, for example, returning
             control to the bootloader.
@@ -196,7 +196,7 @@ class TwiBootloader(object):
             As of version 0.34, retry failed page writes up to 10 times,
             increasing the delay between operations exponentially from one
             attempt to the next.
-        '''
+        """
         chip_info = self.read_chip_info()
 
         pages = load_pages(firmware_path, chip_info['page_size'])
@@ -206,26 +206,22 @@ class TwiBootloader(object):
         max_delay = max(1., 100. * delay_s)
         # Retry failed page writes up to 10 times, increasing the delay between
         # operations exponentially from one attempt to the next.
-        delay_durations = np.logspace(np.log(delay_s) / np.log(10),
-                                      np.log(max_delay) / np.log(10), num=10,
-                                      base=10)
+        delay_durations = np.logspace(np.log(delay_s) / np.log(10), np.log(max_delay) / np.log(10),
+                                      num=10, base=10)
 
         for i, page_i in enumerate(pages):
             # If `verify` is `True`, retry failed page writes up to 10 times.
             for delay_j in delay_durations:
-                print('Write page: %4d/%d     \r' % (i + 1, len(pages)),
-                      end=' ')
+                self.logger.info(f'Write page: {i + 1}/{len(pages)}')
                 self.write_flash(i * chip_info['page_size'], page_i)
                 # Delay to allow bootloader to finish writing to flash.
                 time.sleep(delay_j)
 
                 if not verify:
                     break
-                print('Verify page: %4d/%d    \r' % (i + 1, len(pages)),
-                      end=' ')
+                self.logger.info(f'Verify page: {i + 1}/{len(pages)}')
                 # Verify written page.
-                verify_data_i = self.read_flash(i * chip_info['page_size'],
-                                                chip_info['page_size'])
+                verify_data_i = self.read_flash(i * chip_info['page_size'], chip_info['page_size'])
                 # Delay to allow bootloader to finish processing flash read.
                 time.sleep(delay_j)
                 try:
@@ -236,12 +232,11 @@ class TwiBootloader(object):
                     # Data lengths do not match.
                     pass
             else:
-                raise IOError('Page write failed to verify for **all** '
-                              'attempted delay durations.')
+                raise IOError('Page write failed to verify for **all** attempted delay durations.')
 
 
-def load_pages(firmware_path, page_size):
-    '''
+def load_pages(firmware_path: str, page_size: int) -> List:
+    """
     Load `Intel HEX file`__ and split into pages.
 
     __ Intel HEX file: https://en.wikipedia.org/wiki/Intel_HEX
@@ -258,16 +253,14 @@ def load_pages(firmware_path, page_size):
     list
         List of page contents, where each page is represented as a list of
         integer byte values.
-    '''
-    firmware_path = ph.path(firmware_path)
-    with firmware_path.open('r') as input_:
-        data = input_.read()
+    """
+    firmware_path = path(firmware_path)
+    data = firmware_path.text()
 
     df_data = parse_intel_hex(data)
-    data_bytes = list(it.chain(*df_data.loc[df_data.record_type == 0, 'data']))
+    data_bytes = list(chain(*df_data.loc[df_data.record_type == 0, 'data']))
 
-    pages = [data_bytes[i:i + page_size]
-             for i in range(0, len(data_bytes), page_size)]
+    pages = [data_bytes[i:i + page_size] for i in range(0, len(data_bytes), page_size)]
 
     # Pad end of last page with 0xFF to fill full page size.
     pages[-1].extend([0xFF] * (page_size - len(pages[-1])))

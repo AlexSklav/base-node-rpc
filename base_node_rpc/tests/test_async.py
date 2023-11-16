@@ -1,11 +1,7 @@
-import sys
+# coding: utf-8
+import base_node_rpc.ser_async as bnra
 
-import base_node_rpc.async as bnra
-
-if sys.version_info[0] < 3:
-    import trollius as asyncio
-else:
-    import asyncio
+import asyncio
 
 
 #: .. versionadded:: 0.47

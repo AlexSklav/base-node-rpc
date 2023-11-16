@@ -1,152 +1,98 @@
-{% set PKG_NAME = 'base-node-rpc' %}
-{% set PLATFORMIO_ENVS = 'uno pro8MHzatmega328 teensy31 micro megaADK megaatmega2560'.split(' ') %}
-{% set LIB_NAME = 'BaseNodeRpc' %}
-{% set MODULE_NAME = PKG_NAME.replace('-', '_') %}
-
 {% if GIT_DESCRIBE_NUMBER > '0' %}
 {% set GIT_VERSION = GIT_DESCRIBE_TAG[1:] + '.post' + GIT_DESCRIBE_NUMBER %}
 {% else %}
 {% set GIT_VERSION = GIT_DESCRIBE_TAG[1:] %}
 {% endif %}
-# source will be downloaded prior to filling in jinja templates
-# Example assumes that this folder has setup.py in it
-source:
-  git_url: ../
-
+{% set PKG_NAME = 'base-node-rpc' %}
+{% set LIB_NAME = 'BaseNodeRpc' %}
+{% set MODULE_NAME = PKG_NAME.replace('-', '_') %}
 package:
   name: {{ PKG_NAME }}
   version: {{ GIT_VERSION }}
 
-#: .. versionadded:: 0.42
 build:
+  # If this is a new build for the same version, increment the build number.
+  # If you do not include this key, it defaults to 0.
+  number: 0
   noarch: python
   script:
-    # Generate Arduino `library.properties` file
-    - python -m paver generate_arduino_library_properties
-    # Generate Arduino code
-    - python -m paver generate_all_code
-    # Copy Arduino library to Conda include directory
-    - python -c
-        "import os.path; import os; import shutil; import platformio_helpers as pioh;
-        lib_src_dir = os.path.join(os.environ['SRC_DIR'], 'lib',
-                                   '{{ LIB_NAME }}');
-        install_dir = pioh.conda_arduino_include_path().joinpath('{{ LIB_NAME }}');
-        shutil.copytree(lib_src_dir, install_dir);
-        "
-    # Build firmware
-    - python -m paver build_firmware
-    # Copy compiled firmware to Conda bin directory
-    - python -c
-        "import os.path; import os; import shutil; import platformio_helpers as pioh;
-        SRC_DIR = os.environ['SRC_DIR'];
-        PIO_BIN_DIR = pioh.conda_bin_path().joinpath('{{ PKG_NAME }}');
-        created = (None if os.path.isdir(PIO_BIN_DIR)
-                   else os.makedirs(PIO_BIN_DIR));
-        shutil.copy2(os.path.join(SRC_DIR, 'platformio.ini'),
-                     os.path.join(PIO_BIN_DIR, 'platformio.ini'));
-        {% for pio_platform in PLATFORMIO_ENVS -%}
-        HEX_DIR = os.path.join(PIO_BIN_DIR, '{{ pio_platform }}');
-        os.makedirs(HEX_DIR);
-        shutil.copy2(os.path.join(SRC_DIR, '.pioenvs', '{{ pio_platform }}',
-                                  'firmware.hex'),
-                      os.path.join(PIO_BIN_DIR, '{{ pio_platform }}',
-                                   'firmware.hex'));
-        {%- endfor %}
-        "
-    # Generate `setup.py` from `pavement.py` definition.
-    - python -m paver generate_setup
-
-    # Install source directory as Python package.
-    - python -B setup.py install --single-version-externally-managed --record record.txt
+    # Copy Arduino library to Conda include directory and generate Arduino `library.properties` file
+    - python file_handler.py {{ SRC_DIR }} {{ PREFIX }} {{ PKG_NAME }} {{ MODULE_NAME }} {{ LIB_NAME }}
+    # Run setup
+    - python setup.py install --single-version-externally-managed --record record.txt
 
 requirements:
   build:
-    - platformio-helpers >=0.8
-    - arduino-rpc-dev >=1.16
-    - arduino-rpc >=1.16
-    #: .. versionadded:: 0.38
-    #: .. versionchanged:: 0.42
-    #: .. versionchanged:: 0.46.1
-    - asyncserial >=0.2.3
-    #: .. versionadded:: 0.41
+    - python >=3.8
+    - numpy
+    - nadamq
+    - jinja2
     - blinker
-    - future
-    #: .. versionadded:: 0.41
-    - json-tricks >=3.11.3
-    - logging-helpers >=0.3
-    #: .. versionadded:: 0.30
-    #: .. versionchanged:: 0.38
-    - nadamq >=0.19
-    #: .. versionadded:: 0.42
-    - or-event >=0.2.1
-    - paver
-    - pip
-    - platformio >=3.5.2b2.post19
-    - platformio-framework-arduinoavr >=1.10620.2
-    - platformio-framework-arduinoteensy >=1.141.0
-    - platformio-helpers >=0.8
-    - platformio-tool-avrdude >=1.60300.2
-    - platformio-tool-scons >=3.30001.0
-    - platformio-tool-teensy >=1.141.0
-    - platformio-toolchain-atmelavr >=1.40902.1
-    - platformio-toolchain-gccarmnoneeabi ==1.50401.0
-    #: .. versionchanged:: 0.38
-    - serial-device >=0.11
+    - protobuf
+    - or-event
+    - platformio
+    - asyncserial
+    - json-tricks
+    - arduino-rpc
+    - serial-device
+    - path-helpers
+    - clang-helpers
+    - logging-helpers
+    - platformio-helpers
+    - dropbot-headers
 
 outputs:
   - name: {{ PKG_NAME }}-dev
     noarch: generic
     files:
       - share
-  - name: {{ PKG_NAME }}
-    files:
-      - Lib/site-packages/{{ MODULE_NAME }}
     requirements:
       run:
-        - {{ pin_subpackage('base-node-rpc-dev', max_pin='x.x') }}
-        - arduino-rpc-dev >=1.16
-        - arduino-rpc >=1.16
-        #: .. versionadded:: 0.38
-        #: .. versionchanged:: 0.42
-        #: .. versionchanged:: 0.46.1
-        - asyncserial >=0.2.3
-        #: .. versionadded:: 0.41
+        - platformio
+        - dropbot-headers
+  - name: {{ PKG_NAME }}
+    noarch: python
+    files:
+      - {{ SP_DIR }}/{{ MODULE_NAME }}
+    requirements:
+      run:
+        - python >=3.8
+        - {{ pin_subpackage(PKG_NAME + '-dev', max_pin='x.x') }}
+        - numpy
+        - nadamq
+        - jinja2
         - blinker
-        #: .. versionadded:: 0.41
-        - json-tricks >=3.11.3
-        - logging-helpers >=0.3
-        #: .. versionadded:: 0.30
-        #: .. versionchanged:: 0.38
-        - nadamq >=0.19
-        #: .. versionadded:: 0.42
-        - or-event >=0.2.1
-        - platformio-helpers >=0.8
-        - platformio-tool-avrdude >=1.60300.2
-        - platformio-tool-scons >=3.30001.0
-        - platformio-tool-teensy >=1.141.0
-        #: .. versionchanged:: 0.38
-        - serial-device >=0.11
+        - protobuf
+        - or-event
+        - platformio
+        - asyncserial
+        - json-tricks
+        - arduino-rpc
+        - serial-device
+        - path-helpers
+        - clang-helpers
+        - logging-helpers
+        - platformio-helpers
       test:
         imports:
-          - base_node_rpc
-          #: .. versionadded:: 0.41
-          - base_node_rpc._version
-          - base_node_rpc.async
-          #: .. versionadded:: 0.41
-          - base_node_rpc.bin.upload
-          #: .. versionadded:: 0.41
-          - base_node_rpc.bootloader_driver
-          #: .. versionadded:: 0.41
-          - base_node_rpc.intel_hex
-          #: .. versionadded:: 0.41
-          - base_node_rpc.node
-          #: .. versionadded:: 0.41
-          - base_node_rpc.protobuf
-          #: .. versionadded:: 0.41
-          - base_node_rpc.proxy
-          #: .. versionadded:: 0.41
-          - base_node_rpc.queue
+          - {{ MODULE_NAME }}
+          - {{ MODULE_NAME }}._version
+          - {{ MODULE_NAME }}.ser_async
+          - {{ MODULE_NAME }}.bin.upload
+          - {{ MODULE_NAME }}.bootloader_driver
+          - {{ MODULE_NAME }}.intel_hex
+          - {{ MODULE_NAME }}.node
+          - {{ MODULE_NAME }}.protobuf
+          - {{ MODULE_NAME }}.proxy
+          - {{ MODULE_NAME }}.queue
 
 about:
-  home: https://github.com/wheeler-microfluidics/base-node-rpc
+  home: https://github.com/sci-bots/{{ PKG_NAME }}
   license: MIT
+  summary: Base classes for Arduino RPC node/device.
+
+# source will be downloaded prior to filling in jinja templates
+# Example assumes that this folder has setup.py in it
+source:
+#  git_url: ../
+  path: ..

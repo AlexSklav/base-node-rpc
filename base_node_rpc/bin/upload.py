@@ -1,5 +1,4 @@
-from __future__ import absolute_import
-from __future__ import print_function
+# coding: utf-8
 from platformio_helpers.upload import upload_conda, parse_args
 
 

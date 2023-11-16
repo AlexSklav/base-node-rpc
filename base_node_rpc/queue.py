@@ -1,28 +1,31 @@
-from __future__ import absolute_import
-import logging
+# coding: utf-8
 import time
-from datetime import datetime
-from threading import Thread
+import queue
 
-from nadamq.NadaMq import cPacketParser, PACKET_TYPES
-from six.moves import queue
 import blinker
+import logging
 import json_tricks
+
 import numpy as np
 import pandas as pd
 
+from typing import Optional, Union
+from datetime import datetime
+from threading import Thread
+
+import serial
+from nadamq.NadaMq import cPacketParser, PACKET_TYPES
+
 logger = logging.getLogger(name=__name__)
 
-# Prevent warning about potential future changes to Numpy scalar encoding
-# behaviour.
+# Prevent warning about potential future changes to Numpy scalar encoding behaviour.
 json_tricks.NumpyEncoder.SHOW_SCALAR_WARNING = False
 
 
-class PacketQueueManager(object):
-    '''
-    Parse data from an input stream and push each complete packet on a
-    :class:`queue.Queue` according to the type of packet: ``data``, ``ack``, or
-    ``stream``.
+class PacketQueueManager:
+    """
+    Parse data from an input stream and push each complete packet on a :class:`queue.Queue`
+    according to the type of packet: ``data``, ``ack``, or ``stream``.
 
     Using queues
 
@@ -41,6 +44,8 @@ class PacketQueueManager(object):
             **TODO** Add configurable policy to keep either newest or oldest
             packets after :attr:`high_water_mark` is reached.
 
+    Version log
+    -----------
     .. versionchanged:: 0.30
         Add queue for :attr:`nadamq.NadaMq.PACKET_TYPES.ID_RESPONSE` packets.
 
@@ -64,18 +69,18 @@ class PacketQueueManager(object):
     .. versionchanged:: 0.41.1
         Do not add event packets to a queue.  This prevents the ``stream``
         queue from filling up with rapidly occurring events.
-    '''
-    def __init__(self, high_water_mark=None):
+    """
+
+    def __init__(self, high_water_mark: Optional[int] = None):
         self._packet_parser = cPacketParser()
         packet_types = ['data', 'ack', 'stream', 'id_response']
-        # Signals to connect to indicating packet received or queue is full.
+        # Signals to connect to indicating a packet received or when the queue is full.
         self.signals = blinker.Namespace()
-        self.packet_queues = pd.Series([queue.Queue() for t in packet_types],
-                                       index=packet_types)
+        self.packet_queues = pd.Series([queue.Queue()] * len(packet_types), index=packet_types)
         self.high_water_mark = high_water_mark
 
-    def parse_available(self, stream):
-        '''
+    def parse_available(self, stream) -> None:
+        """
         Read and parse available data from :data:`stream`.
 
         For each complete packet contained in the parsed data (or a packet
@@ -87,18 +92,20 @@ class PacketQueueManager(object):
         stream
             Object that **MUST** have a ``read`` method that returns a
             ``str-like`` value.
-        '''
+        """
         data = stream.read()
         self.parse(data)
 
-    def parse(self, data):
-        '''
+    def parse(self, data: Union[str, bytes]):
+        """
         Parse data.
 
         For each complete packet contained in the parsed data (or a packet
         started on previous read that is completed), push the packet on a queue
         according to the type of packet: ``data``, ``ack``, or ``stream``.
 
+        Version log
+        -----------
         .. versionchanged:: 0.30
             Add handling for :attr:`nadamq.NadaMq.PACKET_TYPES.ID_RESPONSE`
             packets.
@@ -116,7 +123,7 @@ class PacketQueueManager(object):
         Parameters
         ----------
         data : str or bytes
-        '''
+        """
         packets = []
 
         for c in data:
@@ -126,19 +133,15 @@ class PacketQueueManager(object):
                 packet_str = np.fromstring(result.tostring(), dtype='uint8')
                 # Add parsed packet to list of packets parsed during this
                 # method call.
-                packets.append((datetime.now(),
-                                cPacketParser().parse(packet_str)))
-                # Reset the state of the packet parser to prepare for next
-                # packet.
+                packets.append((datetime.now(), cPacketParser().parse(packet_str)))
+                # Reset the state of the packet parser to prepare for the next packet.
                 self._packet_parser.reset()
             elif self._packet_parser.error:
                 # A parsing error occurred.
-                # Reset the state of the packet parser to prepare for next
-                # packet.
+                # Reset the state of the packet parser to prepare for the next packet.
                 self._packet_parser.reset()
 
-        # Filter packets parsed during this method call and queue according to
-        # packet type.
+        # Filter packets parsed during this method call and queue according to packet type.
         for t, p in packets:
             if p.type_ == PACKET_TYPES.STREAM:
                 try:
@@ -153,19 +156,18 @@ class PacketQueueManager(object):
                     # events.
                     continue
                 except Exception:
-                    logger.debug('Stream packet contents do not describe an '
-                                 'event: %s', p.data(), exc_info=True)
+                    logger.debug(f'Stream packet contents do not describe an event: {p.data()}', exc_info=True)
 
             for packet_type_i in ('data', 'ack', 'stream', 'id_response'):
                 if p.type_ == getattr(PACKET_TYPES, packet_type_i.upper()):
-                    self.signals.signal('%s-received' % packet_type_i).send(p)
+                    self.signals.signal(f'{packet_type_i}-received').send(p)
                     if self.queue_full(packet_type_i):
-                        self.signals.signal('%s-full' % packet_type_i).send()
+                        self.signals.signal(f'{packet_type_i}-full').send()
                     else:
                         self.packet_queues[packet_type_i].put((t, p))
 
-    def queue_full(self, name):
-        '''
+    def queue_full(self, name: str) -> bool:
+        """
         Parameters
         ----------
         name : str
@@ -174,15 +176,14 @@ class PacketQueueManager(object):
         Returns
         -------
         bool
-            ``True`` if :attr:`high_water_mark` is has been reached for the
-            specified packet queue.
-        '''
+            ``True`` if :attr:`high_water_mark` has been reached for the specified packet queue.
+        """
         return ((self.high_water_mark is not None) and
                 (self.packet_queues[name].qsize() >= self.high_water_mark))
 
 
-class SerialStream(object):
-    '''
+class SerialStream:
+    """
     Wrapper around :class:`serial.Serial` device to provide a parameterless
     :meth:`read` method.
 
@@ -190,43 +191,45 @@ class SerialStream(object):
     ----------
     serial_device : serial.Serial
         Serial device to wrap.
-    '''
-    def __init__(self, serial_device):
+    """
+
+    def __init__(self, serial_device: serial.Serial):
         self.serial_device = serial_device
 
-    def read(self):
-        '''
+    def read(self) -> bytes:
+        """
         Returns
         -------
         str or bytes
             Available data from serial receiving buffer.
-        '''
+        """
         return self.serial_device.read(self.serial_device.inWaiting())
 
-    def write(self, str):
-        '''
+    def write(self, msg: Union[str, bytes]) -> None:
+        """
         Parameters
         ----------
-        str : str or bytes
+        msg : str or bytes
             Data to write to serial transmission buffer.
-        '''
-        self.serial_device.write(str)
+        """
+        self.serial_device.write(msg)
 
-    def close(self):
-        '''
+    def close(self) -> None:
+        """
         Close serial stream.
-        '''
+        """
         self.serial_device.close()
 
 
-class FakeStream(object):
-    '''
+class FakeStream:
+    """
     Stream interface which returns a list of message strings, one message at a
     time, from the :meth:`read` method.
 
     Useful, for example, for testing the :class:`PacketWatcher` class without a
     serial connection.
-    '''
+    """
+
     def __init__(self, messages):
         self.messages = messages
 
@@ -238,14 +241,13 @@ class FakeStream(object):
 
 
 class PacketWatcher(Thread):
-    '''
+    """
     Thread task to watch for new packets on a stream.
 
     Parameters
     ----------
     stream : SerialStream
-        Object that **MUST** have a ``read`` method that returns a ``str-like``
-        value.
+        Object that **MUST** have a ``read`` method that returns a ``str-like`` value.
     delay_seconds : float, optional
         Number of seconds to wait between polls of stream.
     high_water_mark : int, optional
@@ -253,8 +255,9 @@ class PacketWatcher(Thread):
 
         .. see::
             :class:`PacketQueueManager`
-    '''
-    def __init__(self, stream, delay_seconds=.01, high_water_mark=None):
+    """
+
+    def __init__(self, stream, delay_seconds: Optional[float] = .01, high_water_mark: Optional[int] = None):
         self.message_parser = PacketQueueManager(high_water_mark)
         self.stream = stream
         self.enabled = False
@@ -263,10 +266,10 @@ class PacketWatcher(Thread):
         super(PacketWatcher, self).__init__()
         self.daemon = True
 
-    def run(self):
-        '''
+    def run(self) -> None:
+        """
         Start watching stream.
-        '''
+        """
         while True:
             if self._terminated:
                 break
@@ -274,26 +277,26 @@ class PacketWatcher(Thread):
                 self.parse_available()
             time.sleep(self.delay_seconds)
 
-    def parse_available(self):
-        '''
+    def parse_available(self) -> None:
+        """
         Parse available data from stream.
-        '''
+        """
         self.message_parser.parse_available(self.stream)
 
     @property
-    def queues(self):
+    def queues(self) -> pd.Series:
         return self.message_parser.packet_queues
 
-    def terminate(self):
-        '''
+    def terminate(self) -> None:
+        """
         Stop watching task.
-        '''
+        """
         self._terminated = True
         self.delay_seconds = 0
         self.join()
 
-    def __del__(self):
-        '''
+    def __del__(self) -> None:
+        """
         Stop watching task when deleted.
-        '''
+        """
         self.terminate()
