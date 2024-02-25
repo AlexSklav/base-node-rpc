@@ -3,7 +3,6 @@ RELEASE-VERSION
 *.hex
 *.pyc
 .ropeproject
-setup.py
 paver-minilib.zip
 build/*
 */*_pb2.py
