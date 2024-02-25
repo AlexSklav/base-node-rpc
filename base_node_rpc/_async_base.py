@@ -423,9 +423,10 @@ class BaseNodeSerialMonitor(AsyncSerialMonitor):
         L.debug('start listening for packets')
 
         async def on_packet_received(packet_):
-            if L.getEffectiveLevel() <= logging.DEBUG:
-                L.debug(f'packet received: {PACKET_NAME_BY_TYPE[packet_.type_]}')
-                L.debug(f'parsed packet: `{np.frombuffer(packet_.data(), dtype="uint8")}`')
+
+            L.debug(f'packet received: {PACKET_NAME_BY_TYPE[packet_.type_]}')
+            L.debug('parsed packet: `%s`',
+                    np.frombuffer(packet_.data(), dtype='uint8'))
 
             if packet_.type_ == PACKET_TYPES.STREAM:
                 try:
