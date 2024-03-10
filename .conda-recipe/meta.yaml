@@ -23,7 +23,7 @@ build:
 
 requirements:
   build:
-    - python >=3.6
+    - python {{ python }}
     - numpy
     - nadamq
     - jinja2
@@ -56,7 +56,7 @@ outputs:
       - {{ SP_DIR }}/{{ MODULE_NAME }}
     requirements:
       run:
-        - python >=3.8
+        - python >=3.6
         - {{ pin_subpackage(PKG_NAME + '-dev', max_pin='x.x') }}
         - numpy
         - nadamq
@@ -73,18 +73,19 @@ outputs:
         - clang-helpers
         - logging-helpers
         - platformio-helpers
-      test:
-        imports:
-          - {{ MODULE_NAME }}
-          - {{ MODULE_NAME }}._version
-          - {{ MODULE_NAME }}.ser_async
-          - {{ MODULE_NAME }}.bin.upload
-          - {{ MODULE_NAME }}.bootloader_driver
-          - {{ MODULE_NAME }}.intel_hex
-          - {{ MODULE_NAME }}.node
-          - {{ MODULE_NAME }}.protobuf
-          - {{ MODULE_NAME }}.proxy
-          - {{ MODULE_NAME }}.queue
+
+test:
+  imports:
+    - {{ MODULE_NAME }}
+    - {{ MODULE_NAME }}._version
+    - {{ MODULE_NAME }}.ser_async
+    - {{ MODULE_NAME }}.bin.upload
+    - {{ MODULE_NAME }}.bootloader_driver
+    - {{ MODULE_NAME }}.intel_hex
+    - {{ MODULE_NAME }}.node
+    - {{ MODULE_NAME }}.protobuf
+    - {{ MODULE_NAME }}.proxy
+    - {{ MODULE_NAME }}.queue
 
 about:
   home: https://github.com/sci-bots/{{ PKG_NAME }}
