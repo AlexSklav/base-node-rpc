@@ -447,7 +447,7 @@ class BaseNodeSerialMonitor(AsyncSerialMonitor):
 
             for packet_type_i in ('data', 'ack', 'stream', 'id_response'):
                 if packet_.type_ == getattr(PACKET_TYPES, packet_type_i.upper()):
-                    self.signals.signal(f'[packet_type_i]-received').send(packet_)
+                    self.signals.signal(f'{packet_type_i}-received').send(packet_)
 
         parser = cPacketParser()
         while not self.stop_event.is_set():
