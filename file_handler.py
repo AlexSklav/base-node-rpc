@@ -71,6 +71,8 @@ def transfer(**kwargs) -> None:
     # source_dir = path(source_dir).joinpath(module_name, 'Arduino', 'library', lib_name) # Use this for Arduino libs
     source_dir = path(source_dir).joinpath('lib', lib_name)
     install_dir = pioh.conda_arduino_include_path().joinpath(lib_name)
+    if install_dir.exists():
+        install_dir.rmtree()
     source_dir.copytree(install_dir)
     print(f"Copied tree from '{source_dir}' to '{install_dir}'")
 
@@ -99,11 +101,12 @@ def cli_parser():
     parser.add_argument('source_dir')
     parser.add_argument('prefix')
     parser.add_argument('package_name')
-    parser.add_argument('module_name')
-    parser.add_argument('lib_name')
 
     args = parser.parse_args()
-    execute(**vars(args))
+    args_dict = vars(args)
+    args_dict['module_name'] = args_dict['package_name'].replace('-', '_')
+    args_dict['lib_name'] = ''.join(word.capitalize() for word in args_dict['package_name'].split('-'))
+    execute(**args_dict)
 
 
 def execute(**kwargs):

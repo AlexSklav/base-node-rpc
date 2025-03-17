@@ -15,7 +15,7 @@ import serial_device as sd
 from typing import Union, Optional
 
 from logging_helpers import _L
-from nadamq.NadaMq import cPacket, cPacketParser, PACKET_TYPES, PACKET_NAME_BY_TYPE, PACKET_TYPES
+from nadamq.NadaMq import cPacket, cPacketParser, PACKET_TYPES, PACKET_NAME_BY_TYPE
 
 __all__ = ['read_packet', '_read_device_id', '_available_devices',
            '_async_serial_keepalive', 'AsyncSerialMonitor',
