@@ -2,8 +2,6 @@
 import sys
 import argparse
 
-import platformio_helpers as pioh
-
 from base_node_rpc import __version__ as VERSION
 
 def parse_args(sys_args=None):
@@ -21,7 +19,6 @@ def parse_args(sys_args=None):
 if __name__ == '__main__':
     args, extra_args = parse_args()
 
-    extra_args += [f'-I{lib}'for lib in pioh.conda_arduino_include_path().walkdirs()]
     extra_args += [r'-DDEVICE_ID_RESPONSE=\"base-node-rpc::{}\"'.format(args.version)]
 
     print(' '.join(extra_args))

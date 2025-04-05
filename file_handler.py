@@ -1,4 +1,5 @@
 # coding: utf-8
+import os
 import argparse
 import subprocess
 
@@ -119,7 +120,13 @@ def execute(**kwargs):
     generate_all_code(properties)
     transfer(**kwargs)
     try:
-        subprocess.run(['pio', 'run'])
+        # Set up environment with PLATFORMIO_LIB_EXTRA_DIRS
+        env = os.environ.copy()
+        env['PLATFORMIO_LIB_EXTRA_DIRS'] = str(pioh.conda_arduino_include_path())
+        print(f"Setting PLATFORMIO_LIB_EXTRA_DIRS={env['PLATFORMIO_LIB_EXTRA_DIRS']}")
+        
+        # Run platformio with the modified environment
+        subprocess.run(['pio', 'run'], env=env)
         copy_compiled_firmware(**kwargs)
     except FileNotFoundError:
         print('Failed to generate firmware')
