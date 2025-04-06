@@ -12,7 +12,7 @@ public:
   typedef StateMessage message_type;
   StateMessage state_;
 
-  BaseNodeState(const pb_field_t *fields) : state_(fields) {}
+  BaseNodeState(const pb_msgdesc_t *fields) : state_(fields) {}
 
   void reset_state() { state_.reset(); }
   UInt8Array serialize_state() { return state_.serialize(); }

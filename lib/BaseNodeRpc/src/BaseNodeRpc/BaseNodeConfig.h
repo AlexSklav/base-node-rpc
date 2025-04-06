@@ -14,7 +14,7 @@ public:
   typedef ConfigMessage message_type;
   ConfigMessage config_;
 
-  BaseNodeConfig(const pb_field_t *fields) : config_(fields) {}
+  BaseNodeConfig(const pb_msgdesc_t *fields) : config_(fields) {}
 
   void load_config() { config_.load(Address); }
   void save_config() { config_.save(Address); }

@@ -33,7 +33,7 @@ def get_properties(**kwargs) -> Dict:
 
     properties = dict(package_name=package_name,
                       display_name=package_name,
-                      manufacturer='Wheeler Lab',
+                      manufacturer='Sci-bots Inc.',
                       software_version=version,
                       base_node_software_version=base_node_version,
                       url=url
