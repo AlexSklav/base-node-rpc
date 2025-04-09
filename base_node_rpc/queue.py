@@ -127,10 +127,10 @@ class PacketQueueManager:
         packets = []
 
         for c in data:
-            result = self._packet_parser.parse(np.fromstring(c, dtype='uint8'))
+            result = self._packet_parser.parse(np.frombuffer(c.to_bytes(), dtype='uint8'))
             if result is not False:
                 # A full packet has been parsed.
-                packet_str = np.fromstring(result.tostring(), dtype='uint8')
+                packet_str = np.frombuffer(result.tostring(), dtype='uint8')
                 # Add parsed packet to list of packets parsed during this
                 # method call.
                 packets.append((datetime.now(), cPacketParser().parse(packet_str)))
