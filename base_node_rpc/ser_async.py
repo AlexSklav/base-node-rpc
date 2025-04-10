@@ -41,6 +41,9 @@ def with_loop(func: callable):
         currently running, or b) *not a :class:`asyncio.ProactorEventLoop`
         instance*, execute function in a new thread running a new
         :class:`asyncio.ProactorEventLoop` instance.
+        
+    .. versionchanged:: 0.52
+        Improved thread management and error handling.
     """
 
     @wraps(func)
@@ -59,9 +62,10 @@ def with_loop(func: callable):
         if thread_required:
             _L().debug('Execute new loop in background thread.')
             finished = threading.Event()
+            finished.result = None
+            finished.error = None
 
             def _run(generator):
-                loop = ensure_event_loop()
                 try:
                     result = loop.run_until_complete(asyncio
                                                      .ensure_future(generator))

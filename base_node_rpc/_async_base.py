@@ -52,21 +52,37 @@ async def read_packet(serial_: serial.Serial) -> Union[bool, cPacket]:
     -----------
     .. versionchanged:: 0.48.4
         If a serial exception occurs, e.g., there was no response before timing out, return ``None``.
+    .. versionchanged:: 0.52
+        Improved error handling for better resilience.
     """
     parser = cPacketParser()
     result = False
-    while result is False:
-        try:
-            character = await serial_.read(8 << 10)
-        except Exception as exception:
-            if 'handle is invalid' not in str(exception):
-                port = serial_.port if hasattr(serial_, 'port') else '??'
-                _L().debug(f'Error communicating with port `{port}`', exc_info=True)
-            break
-        result = parser.parse(np.frombuffer(character, dtype='uint8').copy())
-        if parser.error:
-            # Error parsing packet.
-            raise ParseError('Error parsing packet.')
+    
+    try:
+        while result is False:
+            try:
+                character = await serial_.read(8 << 10)
+                if not character:  # No data received
+                    return None
+            except (serial.SerialException, OSError, AttributeError) as exception:
+                port = getattr(serial_, 'port', '??')
+                if 'handle is invalid' not in str(exception):
+                    _L().debug(f'Error communicating with port `{port}`: {exception}')
+                return None
+            except Exception as exception:
+                _L().warning(f'Unexpected error reading from serial port: {exception}')
+                return None
+                
+            result = parser.parse(np.frombuffer(character, dtype='uint8').copy())
+            if parser.error:
+                # Error parsing packet.
+                parser.reset()
+                _L().debug('Error parsing packet, resetting parser')
+                result = False
+    except Exception as e:
+        _L().error(f'Fatal error in read_packet: {e}', exc_info=True)
+        return None
+        
     return result
 
 
@@ -172,24 +188,25 @@ async def _available_devices(ports: str = None, baudrate: Optional[int] = 9600,
         # No ports
         return ports
 
-    # futures = [_read_device_id(port=name_i, baudrate=baudrate, settling_time_s=settling_time_s)
-    #            for name_i in ports.index]
-    #
-    # done, pending = await asyncio.wait(futures, timeout=timeout)
-    #
-    # results = [task_i.result() for task_i in done if task_i.result() is not None]
-    #
-    # if results:
-    #     df_results = pd.DataFrame(results).set_index('port')
-    #     df_results = ports.join(df_results)
-    # else:
-    #     df_results = ports
+    # Create tasks for each port with individual timeouts
+    tasks = []
+    for name_i in ports.index:
+        task = asyncio.ensure_future(_read_device_id(port=name_i, baudrate=baudrate, settling_time_s=settling_time_s))
+        if timeout is not None:
+            task = asyncio.wait_for(task, timeout=timeout)
+        tasks.append(task)
 
-    # here
-    tasks = [asyncio.ensure_future(_read_device_id(port=name_i, baudrate=baudrate, settling_time_s=settling_time_s))
-             for name_i in ports.index]
+    # Run all tasks
+    try:
+        results = await asyncio.gather(*tasks, return_exceptions=True)
+    except asyncio.TimeoutError:
+        # If timeout occurs, cancel all pending tasks
+        for task in tasks:
+            if not task.done():
+                task.cancel()
+        results = [task.result() for task in tasks if task.done() and not task.cancelled()]
 
-    results = await asyncio.gather(*tasks, return_exceptions=True)
+    # Filter out exceptions and None results
     results = [result for result in results if isinstance(result, dict)]
 
     if results:
@@ -245,7 +262,9 @@ async def _async_serial_keepalive(parent: 'AsyncSerialMonitor', *args, **kwargs)
                         await asyncio.sleep(.01)
             _L().info(f'Disconnected from {port}')
         except serial.SerialException as e:
-            pass
+            _L().debug(f"Serial exception while connecting to port: {e}")
+        except Exception as e:
+            _L().error(f"Unexpected error during serial connection: {e}", exc_info=True)
         parent.disconnected_event.set()
     parent.connected_event.clear()
     parent.disconnected_event.set()
@@ -354,24 +373,39 @@ class BaseNodeSerialMonitor(AsyncSerialMonitor):
         self.signals = blinker.Namespace()
 
     def listen(self):
-        # _L().info('listening')
-        # self._request_queue = asyncio.Queue()
-        # tasks = [asyncio.ensure_future(f)
-        #          for f in (self.read_packets(), _async_serial_keepalive(self, *self.args, **self.kwargs))]
-        # self.loop.run_until_complete(asyncio.wait(tasks))
-        # self.loop.close()
         _L().info('listening')
         self.loop = asyncio.new_event_loop()  # Create a new event loop
         asyncio.set_event_loop(self.loop)  # Set the event loop for this thread
 
         self._request_queue = asyncio.Queue()
-        tasks = [self.read_packets(), _async_serial_keepalive(self, *self.args, **self.kwargs)]
-
+        tasks = []
+        
         try:
-            self.loop.run_until_complete(asyncio.gather(*tasks))
+            # Create the tasks
+            read_task = asyncio.ensure_future(self.read_packets(), loop=self.loop)
+            keepalive_task = asyncio.ensure_future(_async_serial_keepalive(self, *self.args, **self.kwargs), loop=self.loop)
+            tasks = [read_task, keepalive_task]
+            
+            # Run until complete or cancelled
+            self.loop.run_until_complete(asyncio.gather(*tasks, return_exceptions=True))
         except asyncio.CancelledError:
-            pass
+            _L().debug("Tasks were cancelled")
+        except Exception as e:
+            _L().error(f"Error in BaseNodeSerialMonitor.listen: {e}", exc_info=True)
         finally:
+            # Ensure all tasks are properly cancelled
+            for task in tasks:
+                if not task.done():
+                    task.cancel()
+                    
+            # Wait a moment for cancellation to complete
+            if tasks:
+                try:
+                    self.loop.run_until_complete(asyncio.wait(tasks, timeout=1.0))
+                except Exception:
+                    pass
+                    
+            # Close the loop
             self.loop.close()
 
     def request(self, request, *args, **kwargs):
@@ -384,13 +418,27 @@ class BaseNodeSerialMonitor(AsyncSerialMonitor):
         -------
         nadamq.NadaMq.cPacket
             Response packet.
+            
+        Raises
+        ------
+        TimeoutError
+            If the device does not respond after max_retries.
         """
+        max_retries = kwargs.pop('max_retries', 3)
+        retry_count = 0
         future = asyncio.run_coroutine_threadsafe(self.arequest(request), loop=self.loop)
-        while True:
+        
+        while retry_count < max_retries:
             try:
                 return future.result(*args, **kwargs)
             except TimeoutError:
-                _L().debug(f'Retry after timeout: {args}, {kwargs}')
+                retry_count += 1
+                if retry_count >= max_retries:
+                    _L().warning(f'Max retries ({max_retries}) reached waiting for response')
+                    raise
+                _L().debug(f'Retry {retry_count}/{max_retries} after timeout: {args}')
+                # Create a new future for retry
+                future = asyncio.run_coroutine_threadsafe(self.arequest(request), loop=self.loop)
 
     async def arequest(self, request, **kwargs):
         """

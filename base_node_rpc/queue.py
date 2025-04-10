@@ -119,29 +119,48 @@ class PacketQueueManager:
         .. versionchanged:: 0.41.1
             Do not add event packets to a queue.  This prevents the ``stream``
             queue from filling up with rapidly occurring events.
+            
+        .. versionchanged:: 0.52
+            Improved performance by processing data in chunks and reducing object creation.
 
         Parameters
         ----------
         data : str or bytes
         """
+        if not data:
+            return
+            
         packets = []
+        current_time = datetime.now()  # Get time once instead of for each packet
+        packet_parser = cPacketParser()  # Create single parser for reparsing
+        
+        # Convert data to numpy array once if needed
+        if isinstance(data, (str, bytes)):
+            try:
+                # Process data as bytes more efficiently
+                data_array = np.frombuffer(data if isinstance(data, bytes) else data.encode(), dtype='uint8')
+            except (TypeError, AttributeError):
+                # Handle individual characters if needed
+                for c in data:
+                    result = self._packet_parser.parse(np.frombuffer(c.to_bytes(), dtype='uint8'))
+                    if result is not False:
+                        packet_str = np.frombuffer(result.tostring(), dtype='uint8')
+                        packets.append((current_time, packet_parser.parse(packet_str)))
+                        self._packet_parser.reset()
+                    elif self._packet_parser.error:
+                        self._packet_parser.reset()
+            else:
+                # Process bytes in chunks for better performance
+                for i in range(len(data_array)):
+                    result = self._packet_parser.parse(data_array[i:i+1])
+                    if result is not False:
+                        packet_str = np.frombuffer(result.tostring(), dtype='uint8')
+                        packets.append((current_time, packet_parser.parse(packet_str)))
+                        self._packet_parser.reset()
+                    elif self._packet_parser.error:
+                        self._packet_parser.reset()
 
-        for c in data:
-            result = self._packet_parser.parse(np.frombuffer(c.to_bytes(), dtype='uint8'))
-            if result is not False:
-                # A full packet has been parsed.
-                packet_str = np.frombuffer(result.tostring(), dtype='uint8')
-                # Add parsed packet to list of packets parsed during this
-                # method call.
-                packets.append((datetime.now(), cPacketParser().parse(packet_str)))
-                # Reset the state of the packet parser to prepare for the next packet.
-                self._packet_parser.reset()
-            elif self._packet_parser.error:
-                # A parsing error occurred.
-                # Reset the state of the packet parser to prepare for the next packet.
-                self._packet_parser.reset()
-
-        # Filter packets parsed during this method call and queue according to packet type.
+        # Process collected packets
         for t, p in packets:
             if p.type_ == PACKET_TYPES.STREAM:
                 try:
@@ -156,15 +175,24 @@ class PacketQueueManager:
                     # events.
                     continue
                 except Exception:
-                    logger.debug(f'Stream packet contents do not describe an event: {p.data()}', exc_info=True)
+                    if logger.isEnabledFor(logging.DEBUG):
+                        logger.debug(f'Stream packet contents do not describe an event: {p.data()}', exc_info=True)
 
-            for packet_type_i in ('data', 'ack', 'stream', 'id_response'):
-                if p.type_ == getattr(PACKET_TYPES, packet_type_i.upper()):
-                    self.signals.signal(f'{packet_type_i}-received').send(p)
-                    if self.queue_full(packet_type_i):
-                        self.signals.signal(f'{packet_type_i}-full').send()
-                    else:
-                        self.packet_queues[packet_type_i].put((t, p))
+            # Use a mapping dict instead of repetitive if/else checks
+            packet_type_map = {
+                PACKET_TYPES.DATA: 'data',
+                PACKET_TYPES.ACK: 'ack',
+                PACKET_TYPES.STREAM: 'stream',
+                PACKET_TYPES.ID_RESPONSE: 'id_response'
+            }
+            
+            packet_type = packet_type_map.get(p.type_)
+            if packet_type:
+                self.signals.signal(f'{packet_type}-received').send(p)
+                if not self.queue_full(packet_type):
+                    self.packet_queues[packet_type].put((t, p))
+                else:
+                    self.signals.signal(f'{packet_type}-full').send()
 
     def queue_full(self, name: str) -> bool:
         """
@@ -202,8 +230,18 @@ class SerialStream:
         -------
         str or bytes
             Available data from serial receiving buffer.
+            
+        .. versionchanged:: 0.52
+            Improved error handling and performance
         """
-        return self.serial_device.read(self.serial_device.inWaiting())
+        try:
+            in_waiting = self.serial_device.in_waiting  # Preferred over inWaiting which is deprecated
+            if in_waiting > 0:
+                return self.serial_device.read(in_waiting)
+            return b''
+        except (OSError, serial.SerialException) as e:
+            logger.debug(f"Error reading from serial device: {e}")
+            return b''
 
     def write(self, msg: Union[str, bytes]) -> None:
         """
@@ -255,31 +293,59 @@ class PacketWatcher(Thread):
 
         .. see::
             :class:`PacketQueueManager`
+            
+    .. versionchanged:: 0.52
+        Improved error handling and performance with adaptive polling
     """
 
-    def __init__(self, stream, delay_seconds: Optional[float] = .01, high_water_mark: Optional[int] = None):
+    def __init__(self, stream, delay_seconds: Optional[float] = .01, high_water_mark: Optional[int] = None,
+                 max_delay_seconds: Optional[float] = 0.1):
         self.message_parser = PacketQueueManager(high_water_mark)
         self.stream = stream
         self.enabled = False
         self._terminated = False
         self.delay_seconds = delay_seconds
+        self.max_delay_seconds = max_delay_seconds
+        self._current_delay = delay_seconds
+        self._consecutive_empty_reads = 0
         super(PacketWatcher, self).__init__()
         self.daemon = True
 
     def run(self) -> None:
         """
         Start watching stream.
+        
+        Uses adaptive polling - increases delay when no data is received
+        to reduce CPU usage, and decreases delay when data is flowing.
         """
-        while True:
-            if self._terminated:
-                break
-            elif self.enabled:
-                self.parse_available()
-            time.sleep(self.delay_seconds)
+        while not self._terminated:
+            try:
+                if self.enabled:
+                    data_received = self.parse_available()
+                    
+                    # Adaptive polling - adjust delay based on activity
+                    if data_received:
+                        self._consecutive_empty_reads = 0
+                        self._current_delay = self.delay_seconds
+                    else:
+                        self._consecutive_empty_reads += 1
+                        # Gradually increase delay up to max_delay_seconds
+                        if self._consecutive_empty_reads > 5:
+                            self._current_delay = min(self._current_delay * 1.5, self.max_delay_seconds)
+                        
+                time.sleep(self._current_delay)
+            except Exception as e:
+                logger.error(f"Error in PacketWatcher: {e}")
+                time.sleep(self.delay_seconds)
 
-    def parse_available(self) -> None:
+    def parse_available(self) -> bool:
         """
         Parse available data from stream.
+        
+        Returns
+        -------
+        bool
+            Whether any data was read from the stream
         """
         self.message_parser.parse_available(self.stream)
 

@@ -419,17 +419,21 @@ class SerialProxyMixin:
                 parent.serial_signals.signal('connected').send({'event': 'connected', 'device': transport})
 
             def data_received(self, data):
-                # New data received from serial port.  Parse using queue
-                # manager.
-                parent._packet_queue_manager.parse(data)
-                parent.serial_signals.signal('data_received').send({'event': 'data_received', 'data': data})
+                # New data received from serial port.  Parse using queue manager.
+                try:
+                    parent._packet_queue_manager.parse(data)
+                    parent.serial_signals.signal('data_received').send({'event': 'data_received', 'data': data})
+                except Exception as e:
+                    logger.error(f"Error processing received data: {e}")
 
             def connection_lost(self, exception):
-                super(PacketProtocol, self).connection_lost(exception)
-                parent.connection_lost(self, exception)
-                parent.serial_signals.signal('disconnected').send({'event': 'disconnected', 'exception': exception})
+                try:
+                    super(PacketProtocol, self).connection_lost(exception)
+                    parent.connection_lost(self, exception)
+                    parent.serial_signals.signal('disconnected').send({'event': 'disconnected', 'exception': exception})
+                except Exception as e:
+                    logger.error(f"Error handling connection loss: {e}")
 
-        # Look up device information for all available ports.
         device_name = getattr(self, 'device_name', None)
 
         if isinstance(port, str):
@@ -454,28 +458,23 @@ class SerialProxyMixin:
                 raise DeviceNotFound(f"No {'device_name ' if device_name else ''}device available on port {port_i}")
 
         for port_i in ports:
-            # Read device ID.
-            device_id = read_device_id(port=port_i,
-                                       timeout=2 * settling_time_s,
-                                       settling_time_s=settling_time_s,
-                                       baudrate=baudrate)
-
-            if device_id is not None and device_name is not None:
-                if device_id.get('device_name') != device_name:
-                    # No devices found with matching name.
-                    raise DeviceNotFound(f"Device `{device_id}` does not match expected name `{device_name}`")
-                elif not (device_id.get('device_version') ==
-                          getattr(self, 'device_version', None)):
-                    # Mismatch between device driver version and version
-                    # reported by device.
-                    if DeviceVersionMismatch in ignore:
-                        logger.warning(f"Device driver version ({self.device_version}) does not match version "
-                                       f"reported by device ({device_id.get('device_version')}).")
-
-                    else:
-                        raise DeviceVersionMismatch(self, device_id.get('device_version'))
-
             try:
+                device_id = read_device_id(port=port_i,
+                                        timeout=2 * settling_time_s,
+                                        settling_time_s=settling_time_s,
+                                        baudrate=baudrate)
+
+                if device_id is not None and device_name is not None:
+                    if device_id.get('device_name') != device_name:
+                        raise DeviceNotFound(f"Device `{device_id}` does not match expected name `{device_name}`")
+                    elif not (device_id.get('device_version') ==
+                            getattr(self, 'device_version', None)):
+                        if DeviceVersionMismatch in ignore:
+                            logger.warning(f"Device driver version ({self.device_version}) does not match version "
+                                        f"reported by device ({device_id.get('device_version')}).")
+                        else:
+                            raise DeviceVersionMismatch(self, device_id.get('device_version'))
+
                 logger.debug(f'Attempt to connect to device on port {port_i} (baudrate={baudrate})')
                 # Launch background thread to:
                 #
@@ -486,28 +485,33 @@ class SerialProxyMixin:
                                                                  port_i,
                                                                  baudrate=baudrate).__enter__()
                 event = OrEvent(self.serial_thread.closed, self.serial_thread.connected)
-            except serial.SerialException:
+                logger.debug(f'Wait for connection to port {port_i}')
+                event.wait(timeout=2.0)  # Short timeout for connection
+                
+                if self.serial_thread.error.is_set():
+                    raise self.serial_thread.error.exception
+
+                time.sleep(settling_time_s)
+
+                try:
+                    self.ram_free()
+                    if device_id is None:
+                        properties = self.properties
+                        device_id = {'device_name': properties['package_name']}
+                    
+                    logger.info(f"Successfully connected to {device_id['device_name']} on port {port_i}")
+                    self.device_verified.set()
+                    return
+                except IOError:
+                    logger.debug(f'Connection unsuccessful on port {port_i}')
+                    continue
+                except Exception as e:
+                    logger.warning(f"Failed to connect to port {port_i}: {e}")
+                    continue
+            except Exception as e:
+                logger.warning(f"Failed to connect to port {port_i}: {e}")
                 continue
 
-            logger.debug(f'Wait for connection to port {port_i}')
-            event.wait()
-            if self.serial_thread.error.is_set():
-                raise self.serial_thread.error.exception
-
-            time.sleep(settling_time_s)
-
-            try:
-                self.ram_free()
-                if device_id is None:
-                    properties = self.properties
-                    device_id = {'device_name': properties['package_name']}
-            except IOError:
-                logger.debug(f'Connection unsuccessful on port {port_i}')
-                continue
-
-            logger.info(f"Successfully connected to {device_id['device_name']} on port {port_i}")
-            self.device_verified.set()
-            return
         raise IOError('Device not found on any port.')
 
     def terminate(self) -> None:
