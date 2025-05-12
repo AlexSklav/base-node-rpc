@@ -119,7 +119,7 @@ class PacketQueueManager:
         .. versionchanged:: 0.41.1
             Do not add event packets to a queue.  This prevents the ``stream``
             queue from filling up with rapidly occurring events.
-            
+
         .. versionchanged:: 0.52
             Improved performance by processing data in chunks and reducing object creation.
 
@@ -129,11 +129,11 @@ class PacketQueueManager:
         """
         if not data:
             return
-            
+
         packets = []
         current_time = datetime.now()  # Get time once instead of for each packet
         packet_parser = cPacketParser()  # Create single parser for reparsing
-        
+
         # Convert data to numpy array once if needed
         if isinstance(data, (str, bytes)):
             try:
@@ -142,9 +142,28 @@ class PacketQueueManager:
             except (TypeError, AttributeError):
                 # Handle individual characters if needed
                 for c in data:
-                    result = self._packet_parser.parse(np.frombuffer(c.to_bytes(), dtype='uint8'))
+                    # Handle different input types appropriately
+                    if isinstance(c, int):
+                        # Integer value
+                        c_bytes = c.to_bytes(1, byteorder='little')
+                    elif isinstance(c, bytes):
+                        # Already bytes
+                        c_bytes = c
+                    elif isinstance(c, str):
+                        # Single character string
+                        c_bytes = c.encode('utf-8')
+                    else:
+                        # Try bytes conversion as last resort
+                        try:
+                            c_bytes = bytes([c])
+                        except (TypeError, ValueError):
+                            logger.warning(f"Skipping unparseable input of type {type(c)}")
+                            continue
+
+                    result = self._packet_parser.parse(np.frombuffer(c_bytes, dtype='uint8'))
                     if result is not False:
-                        packet_str = np.frombuffer(result.tostring(), dtype='uint8')
+                        # A full packet has been parsed - prefer tobytes() over deprecated tostring()
+                        packet_str = np.frombuffer(result.tobytes(), dtype='uint8')
                         packets.append((current_time, packet_parser.parse(packet_str)))
                         self._packet_parser.reset()
                     elif self._packet_parser.error:
@@ -152,9 +171,10 @@ class PacketQueueManager:
             else:
                 # Process bytes in chunks for better performance
                 for i in range(len(data_array)):
-                    result = self._packet_parser.parse(data_array[i:i+1])
+                    result = self._packet_parser.parse(data_array[i:i + 1])
                     if result is not False:
-                        packet_str = np.frombuffer(result.tostring(), dtype='uint8')
+                        # Use tobytes() instead of deprecated tostring()
+                        packet_str = np.frombuffer(result.tobytes(), dtype='uint8')
                         packets.append((current_time, packet_parser.parse(packet_str)))
                         self._packet_parser.reset()
                     elif self._packet_parser.error:
@@ -185,7 +205,7 @@ class PacketQueueManager:
                 PACKET_TYPES.STREAM: 'stream',
                 PACKET_TYPES.ID_RESPONSE: 'id_response'
             }
-            
+
             packet_type = packet_type_map.get(p.type_)
             if packet_type:
                 self.signals.signal(f'{packet_type}-received').send(p)
@@ -230,7 +250,7 @@ class SerialStream:
         -------
         str or bytes
             Available data from serial receiving buffer.
-            
+
         .. versionchanged:: 0.52
             Improved error handling and performance
         """
@@ -293,7 +313,7 @@ class PacketWatcher(Thread):
 
         .. see::
             :class:`PacketQueueManager`
-            
+
     .. versionchanged:: 0.52
         Improved error handling and performance with adaptive polling
     """
@@ -314,7 +334,7 @@ class PacketWatcher(Thread):
     def run(self) -> None:
         """
         Start watching stream.
-        
+
         Uses adaptive polling - increases delay when no data is received
         to reduce CPU usage, and decreases delay when data is flowing.
         """
@@ -322,7 +342,7 @@ class PacketWatcher(Thread):
             try:
                 if self.enabled:
                     data_received = self.parse_available()
-                    
+
                     # Adaptive polling - adjust delay based on activity
                     if data_received:
                         self._consecutive_empty_reads = 0
@@ -332,7 +352,7 @@ class PacketWatcher(Thread):
                         # Gradually increase delay up to max_delay_seconds
                         if self._consecutive_empty_reads > 5:
                             self._current_delay = min(self._current_delay * 1.5, self.max_delay_seconds)
-                        
+
                 time.sleep(self._current_delay)
             except Exception as e:
                 logger.error(f"Error in PacketWatcher: {e}")
@@ -341,7 +361,7 @@ class PacketWatcher(Thread):
     def parse_available(self) -> bool:
         """
         Parse available data from stream.
-        
+
         Returns
         -------
         bool
