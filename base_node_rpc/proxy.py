@@ -6,17 +6,14 @@ import blinker
 import logging
 import warnings
 import threading
+from typing import Optional, Any, Type
 
 import serial
 import serial.threaded
-
 import pandas as pd
-
 import serial_device as sd
 import serial_device.threaded
 import importlib.metadata as metadata
-
-from typing import Optional
 
 from arduino_rpc.protobuf import resolve_field_values, PYTYPE_MAP
 from nadamq.NadaMq import cPacket, PACKET_TYPES
@@ -24,7 +21,6 @@ from or_event import OrEvent
 
 from .queue import PacketQueueManager
 from .ser_async import available_devices, read_device_id
-
 from ._version import get_versions
 
 __version__ = get_versions()['version']
@@ -34,39 +30,59 @@ logger = logging.getLogger(__name__)
 
 
 class DeviceNotFound(Exception):
+    """Raised when a device cannot be found."""
     pass
 
 
 class MultipleDevicesFound(Exception):
-    def __init__(self, *args, **kwargs):
+    """Raised when multiple devices are found and only one was expected."""
+    def __init__(self, *args: Any, **kwargs: Any) -> None:
         self.df_comports = kwargs.pop('df_comports', None)
         super().__init__(*args, **kwargs)
 
 
 class DeviceVersionMismatch(Exception):
-    def __init__(self, device: 'Proxy', device_version: str):
+    """Raised when device version doesn't match expected version."""
+    def __init__(self, device: 'Proxy', device_version: str) -> None:
         self.device = device
         self.device_version = device_version
         super().__init__()
 
     def __str__(self) -> str:
-        return (f'Device driver version ({self.device.device_version}) '
-                f'does not match the version reported by device ({self.device_version}).')
+        return (
+            f'Device driver version ({self.device.device_version}) '
+            f'does not match version reported by device '
+            f'({self.device_version}).'
+        )
 
 
 class ProxyBase:
+    """Base class for device proxies."""
     host_package_name: Optional[str] = None
 
-    def __init__(self, buffer_bounds_check: Optional[bool] = True,
+    def __init__(self,
+                 buffer_bounds_check: Optional[bool] = True,
                  high_water_mark: Optional[int] = 10,
-                 timeout_s: Optional[int] = 10, **kwargs):
+                 timeout_s: Optional[int] = 10,
+                 **kwargs: Any) -> None:
         """
-        .. versionchanged:: 0.43
-            Ignore extra keyword arguments (rather than throwing an exception).
+        Initialize proxy base class.
+
+        Parameters
+        ----------
+        buffer_bounds_check : bool, optional
+            Whether to check buffer bounds. Default: True
+        high_water_mark : int, optional
+            High water mark for packet queue. Default: 10
+        timeout_s : int, optional
+            Timeout in seconds. Default: 10
+        **kwargs
+            Additional keyword arguments.
         """
         self._buffer_bounds_check = buffer_bounds_check
         self._buffer_size: Optional[int] = None
-        self._packet_queue_manager = PacketQueueManager(high_water_mark=high_water_mark)
+        self._packet_queue_manager = PacketQueueManager(
+            high_water_mark=high_water_mark)
         self._timeout_s = timeout_s
         self._stream = None
 
@@ -81,48 +97,53 @@ class ProxyBase:
 
     @property
     def remote_software_version(self) -> str:
+        """Get remote software version."""
         from packaging.version import Version
         return Version(self.properties.software_version)
 
     @property
-    def stream(self):
+    def stream(self) -> Any:
+        """Get stream."""
         return self._stream
 
     @stream.setter
-    def stream(self, stream) -> None:
+    def stream(self, stream: Any) -> None:
+        """Set stream."""
         self._stream = stream
         self.reset()
 
     @property
     def high_water_mark(self) -> int:
+        """Get high water mark."""
         return self._packet_queue_manager.high_water_mark
 
     @high_water_mark.setter
     def high_water_mark(self, message_count: int) -> None:
+        """Set high water mark."""
         self._packet_queue_manager.high_water_mark = message_count
 
     def help(self) -> None:
-        """
-        Open project webpage in new browser tab.
-        """
+        """Open project webpage in new browser tab."""
         import webbrowser
-
         url = self.properties.url
         if url:
             webbrowser.open_new_tab(url)
 
     @property
     def properties(self) -> pd.Series:
-        properties = {k: getattr(self, k)().tostring().decode('utf-8')
-                      for k in ['base_node_software_version',
-                                'package_name', 'display_name',
-                                'manufacturer', 'url',
-                                'software_version']
-                      if hasattr(self, k)}
+        """Get device properties."""
+        properties = {
+            k: getattr(self, k)().tostring().decode('utf-8')
+            for k in ['base_node_software_version', 'package_name',
+                     'display_name', 'manufacturer', 'url',
+                     'software_version']
+            if hasattr(self, k)
+        }
         return pd.Series(properties, dtype=object)
 
     @property
     def buffer_size(self) -> int:
+        """Get buffer size."""
         if self._buffer_size is None:
             self._buffer_bounds_check = False
             payload_size_set = False
@@ -137,10 +158,11 @@ class ProxyBase:
             except AttributeError:
                 max_serial_payload_size = sys.maxsize
             if not payload_size_set:
-                raise IOError('Could not determine maximum packet payload '
-                              'size. Make sure at least one of the following '
-                              'methods is defined: `max_i2c_payload_size` '
-                              'method or `max_serial_payload_size`.')
+                raise IOError(
+                    'Could not determine maximum packet payload size. '
+                    'Make sure at least one of the following methods is '
+                    'defined: `max_i2c_payload_size` method or '
+                    '`max_serial_payload_size`.')
             self._buffer_size = min(max_serial_payload_size,
                                     max_i2c_payload_size)
             self._buffer_bounds_check = True
@@ -148,61 +170,62 @@ class ProxyBase:
 
     @property
     def queues(self) -> pd.Series:
+        """Get packet queues."""
         return self._packet_queue_manager.packet_queues
 
-    def _send_command(self, packet: cPacket, timeout_s: Optional[int] = None,
-                      poll: Optional[bool] = sd.threaded.POLL_QUEUES) -> None:
+    def _send_command(self,
+                     packet: cPacket,
+                     timeout_s: Optional[int] = None,
+                     poll: Optional[bool] = sd.threaded.POLL_QUEUES) -> None:
+        """Send command to device."""
         raise NotImplementedError
 
 
 class I2cProxyMixin:
-    def __init__(self, i2c_address: str, proxy: 'Proxy'):
+    """Mixin for I2C proxy functionality."""
+    def __init__(self, i2c_address: str, proxy: 'Proxy') -> None:
         self.proxy = proxy
         self.address = i2c_address
 
     def _send_command(self, packet: cPacket) -> cPacket:
-        response = self.proxy.i2c_request(self.address, list(map(ord, packet.data())))
+        """Send command via I2C."""
+        response = self.proxy.i2c_request(
+            self.address, list(map(ord, packet.data())))
         return cPacket(data=response.tostring(), type_=PACKET_TYPES.DATA)
 
     def __del__(self) -> None:
+        """Cleanup."""
         pass
 
 
-def serial_ports(device_name: Optional[str] = None, timeout: Optional[float] = 5.,
-                 allow_multiple: Optional[bool] = False, **kwargs) -> pd.DataFrame:
+def serial_ports(
+    device_name: Optional[str] = None,
+    timeout: Optional[float] = 5.,
+    allow_multiple: Optional[bool] = False,
+    **kwargs: Any
+) -> pd.DataFrame:
     """
+    Get list of available serial ports.
+
     Parameters
     ----------
     device_name : str, optional
-        Device name as reported by :data:`ID_RESPONSE` packet.
-
-        If ``None``, return all serial ports that are not busy.
+        Device name as reported by ID_RESPONSE packet.
+        If None, return all serial ports that are not busy.
     timeout : float, optional
-        Maximum number of seconds to wait for a response from each serial
-        device.
-
-        If ``None``, call will block until response is received from each
-        serial port.
+        Maximum seconds to wait for response from each serial device.
+        If None, call will block until response is received.
     allow_multiple : bool, optional
         Allow multiple devices with the same name.
     **kwargs
-        Keyword arguments to pass to `available_devices()` function.
+        Keyword arguments to pass to available_devices() function.
 
     Returns
     -------
-    pandas.DataFrame
-        Table of serial ports that match the specified :data:`device_name`.
-
-        If no device name was specified, returns all serial ports that are not
-        busy.
-
-    Version log
-    -----------
-    .. versionadded:: 0.40
-    .. versionchanged:: 0.40.3
-        Add :data:`allow_multiple` argument.
-    .. versionchanged:: 0.51.2
-        Pass extra keyword arguments to `available_devices()` function.
+    pd.DataFrame
+        Table of serial ports that match the specified device_name.
+        If no device name was specified, returns all serial ports
+        that are not busy.
     """
     if device_name is None:
         # No device name specified in base class.
@@ -215,7 +238,8 @@ def serial_ports(device_name: Optional[str] = None, timeout: Optional[float] = 5
             # No devices found with matching name.
             raise DeviceNotFound('No named devices found.')
         elif df_comports.shape[0]:
-            df_comports = df_comports.loc[df_comports.device_name == device_name].copy()
+            df_comports = df_comports.loc[
+                df_comports.device_name == device_name].copy()
         if not df_comports.shape[0]:
             raise DeviceNotFound('No devices found with matching name.')
         elif df_comports.shape[0] > 1 and not allow_multiple:
@@ -225,14 +249,17 @@ def serial_ports(device_name: Optional[str] = None, timeout: Optional[float] = 5
 
 
 class SerialProxyMixin:
-    def __init__(self, **kwargs):
+    """Mixin for serial proxy functionality."""
+    def __init__(self, **kwargs: Any) -> None:
         """
-        Attempt to auto-connect to a proxy.
+        Initialize serial proxy or attempt to auto-connect to a proxy.
 
         Parameters
         ----------
         port : str, optional
+            Serial port to connect to.
         baudrate : int, optional
+            Baud rate to use. Default: 115200
         settling_time_s : float, optional
             If specified, wait :data:`settling_time_s` seconds after
             establishing serial connection before trying to execute test
@@ -272,8 +299,9 @@ class SerialProxyMixin:
         baudrate = kwargs.pop('baudrate', 115200)
 
         if 'retry_count' in kwargs:
-            warnings.warn('`retry_count` arg is deprecated and will be removed in future releases.',
-                          DeprecationWarning)
+            warnings.warn(
+                '`retry_count` arg is deprecated and will be removed in '
+                'future releases.', DeprecationWarning)
             kwargs.pop('retry_count', None)
 
         self.serial_signals = blinker.Namespace()
@@ -292,7 +320,8 @@ class SerialProxyMixin:
         self._connect(port=port, baudrate=baudrate)
 
     @property
-    def port(self) -> str:
+    def port(self) -> Optional[str]:
+        """Get serial port."""
         try:
             port = self.serial_thread.protocol.port
         except Exception:
@@ -300,33 +329,41 @@ class SerialProxyMixin:
         return port
 
     @property
-    def baudrate(self) -> int:
+    def baudrate(self) -> Optional[int]:
+        """Get baud rate."""
         try:
             baudrate = self.serial_thread.protocol.transport.serial.baudrate
         except Exception:
             baudrate = None
         return baudrate
 
-    def reconnection_made(self, protocol: serial.threaded.Protocol):
+    def reconnection_made(self, protocol: serial.threaded.Protocol) -> None:
         """
         Callback called if/when a device is reconnected to port after lost connection.
         """
         logger.debug(f'Reconnected to `{protocol.port}`')
 
-    def connection_lost(self, protocol: serial.threaded.Protocol, exception: Exception):
-        """
-        Callback called if/when serial connection is lost.
-        """
+    def connection_lost(self,
+                       protocol: serial.threaded.Protocol,
+                       exception: Exception) -> None:
+        """Callback called if/when serial connection is lost."""
         logger.debug(f'Connection lost `{protocol.port}`')
 
-    def _connect(self, port: Optional[str] = None, baudrate: Optional[int] = None,
-                 settling_time_s: Optional[float] = None, retry_count: Optional[int] = None,
-                 ignore: Optional[bool] = None) -> None:
+    def _connect(self,
+                port: Optional[str] = None,
+                baudrate: Optional[int] = None,
+                settling_time_s: Optional[float] = None,
+                retry_count: Optional[int] = None,
+                ignore: Optional[bool] = None) -> None:
         """
+        Connect to serial device.
+
         Parameters
         ----------
         port : str, optional
+            Serial port to connect to.
         baudrate : int, optional
+            Baud rate to use.
         settling_time_s : float, optional
             If specified, wait :data:`settling_time_s` seconds after
             establishing serial connection before trying to execute test
@@ -404,8 +441,11 @@ class SerialProxyMixin:
                 baudrate = 115200
 
         if retry_count is not None:
-            warnings.warn('`retry_count` arg is deprecated and will be removed in future releases.',
-                          DeprecationWarning)
+            warnings.warn(
+                '`retry_count` arg is deprecated and will be removed in '
+                'future releases.',
+                DeprecationWarning
+            )
 
         parent = self
 
@@ -416,13 +456,17 @@ class SerialProxyMixin:
                     # Device identity has been previously verified.
                     # Must be reconnecting after lost connection.
                     parent.reconnection_made(self)
-                parent.serial_signals.signal('connected').send({'event': 'connected', 'device': transport})
+                parent.serial_signals.signal('connected').send(
+                    {'event': 'connected', 'device': transport}
+                )
 
             def data_received(self, data):
                 # New data received from serial port.  Parse using queue manager.
                 try:
                     parent._packet_queue_manager.parse(data)
-                    parent.serial_signals.signal('data_received').send({'event': 'data_received', 'data': data})
+                    parent.serial_signals.signal('data_received').send(
+                        {'event': 'data_received', 'data': data}
+                    )
                 except Exception as e:
                     logger.error(f"Error processing received data: {e}")
 
@@ -430,7 +474,9 @@ class SerialProxyMixin:
                 try:
                     super(PacketProtocol, self).connection_lost(exception)
                     parent.connection_lost(self, exception)
-                    parent.serial_signals.signal('disconnected').send({'event': 'disconnected', 'exception': exception})
+                    parent.serial_signals.signal('disconnected').send(
+                        {'event': 'disconnected', 'exception': exception}
+                    )
                 except Exception as e:
                     logger.error(f"Error handling connection loss: {e}")
 
@@ -438,15 +484,19 @@ class SerialProxyMixin:
 
         if isinstance(port, str):
             # Single port was explicitly specified.
-            df_comports = serial_ports(device_name=device_name,
-                                       baudrate=baudrate,
-                                       settling_time_s=settling_time_s,
-                                       allow_multiple=True)
+            df_comports = serial_ports(
+                device_name=device_name,
+                baudrate=baudrate,
+                settling_time_s=settling_time_s,
+                allow_multiple=True
+            )
             ports = [port]
         else:
-            df_comports = serial_ports(device_name=device_name,
-                                       settling_time_s=settling_time_s,
-                                       baudrate=baudrate)
+            df_comports = serial_ports(
+                device_name=device_name,
+                settling_time_s=settling_time_s,
+                baudrate=baudrate
+            )
             if port is None:
                 ports = df_comports.index.tolist()
             else:
@@ -455,36 +505,56 @@ class SerialProxyMixin:
 
         for port_i in ports:
             if port_i not in df_comports.index:
-                raise DeviceNotFound(f"No {'device_name ' if device_name else ''}device available on port {port_i}")
+                raise DeviceNotFound(
+                    f"No {'device_name ' if device_name else ''}"
+                    f"device available on port {port_i}"
+                )
 
         for port_i in ports:
             try:
-                device_id = read_device_id(port=port_i,
-                                        timeout=2 * settling_time_s,
-                                        settling_time_s=settling_time_s,
-                                        baudrate=baudrate)
+                device_id = read_device_id(
+                    port=port_i,
+                    timeout=2 * settling_time_s,
+                    settling_time_s=settling_time_s,
+                    baudrate=baudrate
+                )
 
                 if device_id is not None and device_name is not None:
                     if device_id.get('device_name') != device_name:
-                        raise DeviceNotFound(f"Device `{device_id}` does not match expected name `{device_name}`")
+                        raise DeviceNotFound(
+                            f"Device `{device_id}` does not match "
+                            f"expected name `{device_name}`"
+                        )
                     elif not (device_id.get('device_version') ==
                             getattr(self, 'device_version', None)):
                         if DeviceVersionMismatch in ignore:
-                            logger.warning(f"Device driver version ({self.device_version}) does not match version "
-                                        f"reported by device ({device_id.get('device_version')}).")
+                            logger.warning(
+                                f"Device driver version ({self.device_version}) "
+                                f"does not match version reported by device "
+                                f"({device_id.get('device_version')})."
+                            )
                         else:
-                            raise DeviceVersionMismatch(self, device_id.get('device_version'))
+                            raise DeviceVersionMismatch(
+                                self, device_id.get('device_version')
+                            )
 
-                logger.debug(f'Attempt to connect to device on port {port_i} (baudrate={baudrate})')
+                logger.debug(
+                    f'Attempt to connect to device on port {port_i} '
+                    f'(baudrate={baudrate})'
+                )
                 # Launch background thread to:
                 #
                 #  - Connect to serial port
                 #  - Listen for incoming data and parse into packets.
                 #  - Attempt to reconnect if disconnected.
-                self.serial_thread = sd.threaded.KeepAliveReader(PacketProtocol,
-                                                                 port_i,
-                                                                 baudrate=baudrate).__enter__()
-                event = OrEvent(self.serial_thread.closed, self.serial_thread.connected)
+                self.serial_thread = sd.threaded.KeepAliveReader(
+                    PacketProtocol, port_i,
+                    baudrate=baudrate
+                ).__enter__()
+                event = OrEvent(
+                    self.serial_thread.closed,
+                    self.serial_thread.connected
+                )
                 logger.debug(f'Wait for connection to port {port_i}')
                 event.wait(timeout=2.0)  # Short timeout for connection
                 
@@ -499,7 +569,10 @@ class SerialProxyMixin:
                         properties = self.properties
                         device_id = {'device_name': properties['package_name']}
                     
-                    logger.info(f"Successfully connected to {device_id['device_name']} on port {port_i}")
+                    logger.info(
+                        f"Successfully connected to {device_id['device_name']} "
+                        f"on port {port_i}"
+                    )
                     self.device_verified.set()
                     return
                 except IOError:
@@ -515,22 +588,44 @@ class SerialProxyMixin:
         raise IOError('Device not found on any port.')
 
     def terminate(self) -> None:
+        """Terminate the serial connection."""
         if self.serial_thread is not None:
             self.serial_thread.__exit__()
 
-    def _send_command(self, packet: cPacket, timeout_s: Optional[float] = None,
-                      poll: Optional[bool] = sd.threaded.POLL_QUEUES):
+    def _send_command(self,
+                     packet: cPacket,
+                     timeout_s: Optional[float] = None,
+                     poll: Optional[bool] = sd.threaded.POLL_QUEUES) -> cPacket:
         """
-        Version log
-        -----------
-        .. versionchanged:: 0.51
-            Add thread-safety using lock.
+        Send command to device.
+
+        Parameters
+        ----------
+        packet : cPacket
+            Packet to send.
+        timeout_s : float, optional
+            Timeout in seconds.
+        poll : bool, optional
+            Whether to poll queues.
+
+        Returns
+        -------
+        cPacket
+            Response packet.
+
+        Raises
+        ------
+        IOError
+            If packet size is too large or no response is received.
         """
         if timeout_s is None:
             timeout_s = self._timeout_s
 
         if self._buffer_bounds_check and len(packet.data()) > self.buffer_size:
-            raise IOError(f'Packet size {len(packet.data()) - self.buffer_size} bytes too large.')
+            raise IOError(
+                f'Packet size {len(packet.data()) - self.buffer_size} '
+                f'bytes too large.'
+            )
 
         with self._command_lock:
             # Flush outstanding data packets.
@@ -538,10 +633,12 @@ class SerialProxyMixin:
                 self.queues['data'].get()
 
             try:
-                timestamp, response = self.serial_thread.request(self.queues['data'],
-                                                                 packet.tostring(),
-                                                                 timeout_s=timeout_s,
-                                                                 poll=poll)
+                timestamp, response = self.serial_thread.request(
+                    self.queues['data'],
+                    packet.tostring(),
+                    timeout_s=timeout_s,
+                    poll=poll
+                )
             except queue.Empty:
                 raise IOError('Did not receive response.')
         return response
@@ -556,40 +653,57 @@ class ConfigMixinBase:
     """
 
     @property
-    def config_class(self):
-        raise NotImplementedError('Sub-classes must implement this method to '
-                                  'return the `Config` class type for the proxy.')
+    def config_class(self) -> Type:
+        """Get configuration class."""
+        raise NotImplementedError(
+            'Sub-classes must implement this method to return the `Config` '
+            'class type for the proxy.')
 
     @property
-    def _config_pb(self):
-        return self.config_class.FromString(self.serialize_config().tostring())
+    def _config_pb(self) -> Any:
+        """Get configuration protobuf."""
+        return self.config_class.FromString(
+            self.serialize_config().tostring())
 
     @property
     def config(self) -> pd.Series:
+        """Get configuration."""
         try:
-            fv = resolve_field_values(self._config_pb, set_default=True).set_index(['full_name'])
-            return pd.Series({k: PYTYPE_MAP[v.field_desc.type](v.value) for k, v in fv.iterrows()},
-                             dtype=object)
+            fv = resolve_field_values(self._config_pb,
+                                      set_default=True).set_index(['full_name'])
+            return pd.Series(
+                {k: PYTYPE_MAP[v.field_desc.type](v.value)
+                 for k, v in fv.iterrows()},
+                dtype=object)
         except ValueError:
             return pd.Series()
 
     @config.setter
     def config(self, value: pd.Series) -> None:
-        # convert pandas Series to a dictionary if necessary
+        """Set configuration."""
         if hasattr(value, 'to_dict'):
             value = value.to_dict()
-
         self.update_config(**value)
 
-    def update_config(self, **kwargs):
+    def update_config(self, **kwargs: Any) -> int:
         """
         Update fields in the config object based on keyword arguments.
-
+        
         By default, these values will be saved to EEPROM. To prevent this
         (e.g., to verify system behavior before committing the changes), you
         can pass the special keyword argument 'save=False'. In this case, you
         will need to call the method save_config() to make your changes
         persistent.
+        
+        Parameters
+        ----------
+        **kwargs
+            Configuration values to update.
+
+        Returns
+        -------
+        int
+            Return code.
         """
         save = True
         if 'save' in kwargs and not kwargs.pop('save'):
@@ -597,7 +711,6 @@ class ConfigMixinBase:
 
         # convert dictionary to a protobuf
         config_pb = self.config_class(**kwargs)
-
         return_code = super().update_config(config_pb)
 
         if save:
@@ -605,15 +718,20 @@ class ConfigMixinBase:
 
         return return_code
 
-    def reset_config(self, **kwargs) -> None:
+    def reset_config(self, **kwargs: Any) -> None:
         """
         Reset fields in the config object to their default values.
-
+        
         By default, these values will be saved to EEPROM. To prevent this
         (e.g., to verify system behavior before committing the changes), you
         can pass the special keyword argument 'save=False'. In this case, you
         will need to call the method save_config() to make your changes
         persistent.
+        
+        Parameters
+        ----------
+        **kwargs
+            Additional keyword arguments.
         """
         save = True
         if 'save' in kwargs and not kwargs.pop('save'):
@@ -633,30 +751,51 @@ class StateMixinBase:
     """
 
     @property
-    def state_class(self):
-        raise NotImplementedError('Sub-classes must implement this method to '
-                                  'return the `State` class type for the proxy.')
+    def state_class(self) -> Type:
+        """Get state class."""
+        raise NotImplementedError(
+            'Sub-classes must implement this method to return the `State` '
+            'class type for the proxy.')
 
     @property
-    def _state_pb(self):
-        return self.state_class.FromString(self.serialize_state().tostring())
+    def _state_pb(self) -> Any:
+        """Get state protobuf."""
+        return self.state_class.FromString(
+            self.serialize_state().tostring())
 
     @property
     def state(self) -> pd.Series:
+        """Get state."""
         try:
-            fv = (resolve_field_values(self._state_pb, set_default=True).set_index(['full_name']))
-            return pd.Series({k: PYTYPE_MAP[v.field_desc.type](v.value) for k, v in fv.iterrows()}, dtype=object)
+            fv = (resolve_field_values(self._state_pb,
+                                     set_default=True).set_index(['full_name']))
+            return pd.Series(
+                {k: PYTYPE_MAP[v.field_desc.type](v.value)
+                 for k, v in fv.iterrows()},
+                dtype=object)
         except ValueError:
             return pd.Series()
 
     @state.setter
     def state(self, value: pd.Series) -> None:
-        # convert pandas Series to a dictionary if necessary
+        """Set state."""
         if hasattr(value, 'to_dict'):
             value = value.to_dict()
-
         self.update_state(**value)
 
-    def update_state(self, **kwargs):
+    def update_state(self, **kwargs: Any) -> int:
+        """
+        Update state.
+
+        Parameters
+        ----------
+        **kwargs
+            State values to update.
+
+        Returns
+        -------
+        int
+            Return code.
+        """
         state = self.state_class(**kwargs)
         return super().update_state(state)

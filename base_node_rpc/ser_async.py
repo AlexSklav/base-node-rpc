@@ -2,24 +2,29 @@
 import asyncio
 import platform
 import threading
+from functools import wraps
+from typing import Optional, Coroutine, Any
 
 import pandas as pd
-
-from functools import wraps
-from typing import Optional, Coroutine
-
 from logging_helpers import _L
 
 from ._async_base import BaseNodeSerialMonitor, _available_devices, _read_device_id
 
 
 def new_file_event_loop() -> asyncio.AbstractEventLoop:
+    """Create a new event loop appropriate for the current platform."""
+    if platform.system() == 'Windows':
+        return asyncio.ProactorEventLoop()
     return asyncio.new_event_loop()
 
 
 def ensure_event_loop() -> asyncio.AbstractEventLoop:
+    """Ensure there is a valid event loop in the current thread."""
     try:
         loop = asyncio.get_event_loop()
+        if loop.is_closed():
+            loop = new_file_event_loop()
+            asyncio.set_event_loop(loop)
     except RuntimeError as e:
         if 'There is no current event loop' in str(e):
             loop = new_file_event_loop()
@@ -29,25 +34,21 @@ def ensure_event_loop() -> asyncio.AbstractEventLoop:
     return loop
 
 
-def with_loop(func: callable):
+def with_loop(func: callable) -> callable:
     """
     Decorator to run function within an asyncio event loop.
 
-    .. notes::
-        Uses :class:`asyncio.ProactorEventLoop` on Windows to support file I/O
-        events, e.g., serial device events.
+    Uses :class:`asyncio.ProactorEventLoop` on Windows by default for better
+    I/O performance, but falls back to :class:`asyncio.SelectorEventLoop` if
+    needed.
 
-        If an event loop is already bound to the thread, but is either a)
-        currently running, or b) *not a :class:`asyncio.ProactorEventLoop`
-        instance*, execute function in a new thread running a new
-        :class:`asyncio.ProactorEventLoop` instance.
-        
-    .. versionchanged:: 0.52
-        Improved thread management and error handling.
+    If an event loop is already bound to the thread, but is either a)
+    currently running, or b) *not the preferred loop type for the platform*,
+    execute function in a new thread running a new event loop instance.
     """
 
     @wraps(func)
-    def wrapped(*args, **kwargs):
+    def wrapped(*args: Any, **kwargs: Any) -> Any:
         loop = ensure_event_loop()
 
         thread_required = False
@@ -55,9 +56,10 @@ def with_loop(func: callable):
             _L().debug('Event loop is already running.')
             thread_required = True
         elif platform.system() == 'Windows':
+            # Only require ProactorEventLoop if we're doing I/O operations
             if not isinstance(loop, asyncio.ProactorEventLoop):
-                _L().debug(f'`ProactorEventLoop` required, not `{type(loop)}` loop in background thread.')
-            thread_required = True
+                _L().debug('Using ProactorEventLoop for better I/O performance')
+                thread_required = True
 
         if thread_required:
             _L().debug('Execute new loop in background thread.')
@@ -66,9 +68,13 @@ def with_loop(func: callable):
             finished.error = None
 
             def _run(generator):
+                # Create and set a new event loop for this thread
+                new_loop = new_file_event_loop()
+                asyncio.set_event_loop(new_loop)
+                
                 try:
-                    result = loop.run_until_complete(asyncio
-                                                     .ensure_future(generator))
+                    result = new_loop.run_until_complete(
+                        asyncio.ensure_future(generator))
                 except Exception as e:
                     finished.result = None
                     finished.error = e
@@ -76,9 +82,23 @@ def with_loop(func: callable):
                     finished.result = result
                     finished.error = None
                 finally:
-                    loop.close()
-                    _L().debug('closed event loop')
-                finished.set()
+                    try:
+                        # Cancel all running tasks
+                        pending = asyncio.all_tasks(new_loop)
+                        for task in pending:
+                            task.cancel()
+                        # Run the loop until all tasks are cancelled
+                        if pending:
+                            new_loop.run_until_complete(
+                                asyncio.gather(*pending, 
+                                               return_exceptions=True))
+                        # Stop the loop before closing it
+                        new_loop.stop()
+                        new_loop.close()
+                        _L().debug('closed event loop')
+                    except Exception as e:
+                        _L().debug(f'Error closing event loop: {e}')
+                    finished.set()
 
             thread = threading.Thread(target=_run,
                                       args=(func(*args, **kwargs),))
@@ -89,62 +109,49 @@ def with_loop(func: callable):
                 raise finished.error
             return finished.result
 
-        _L().debug('Execute in exiting event loop in main thread')
-        return loop.run_until_complete(func(**kwargs))
+        _L().debug('Execute in existing event loop in main thread')
+        return loop.run_until_complete(func(*args, **kwargs))
 
     return wrapped
 
 
 @with_loop
-def available_devices(baudrate: Optional[int] = 9600, ports: Optional[pd.DataFrame] = None,
-                      timeout: Optional[float] = None, **kwargs) -> Coroutine:
+def available_devices(
+    baudrate: Optional[int] = 9600,
+    ports: Optional[pd.DataFrame] = None,
+    timeout: Optional[float] = None,
+    **kwargs
+) -> Coroutine:
     """
-    Request list of available serial devices, including device identifier (if
-    available).
-
-    .. note::
-        Synchronous wrapper for :func:`_available_devices`.
+    Request list of available serial devices, including device identifier.
 
     Parameters
     ----------
     baudrate : int, optional
         Baud rate to use for device identifier request.
-
-        **Default: 9600**
-    ports : pd.DataFrame
-        Table of ports to query (in format returned by
-        :func:`serial_device.comports`).
-
-        **Default: all available ports**
+        Default: 9600
+    ports : pd.DataFrame, optional
+        Table of ports to query.
+        Default: all available ports
     timeout : float, optional
-        Maximum number of seconds to wait for a response from each serial
-        device.
+        Maximum seconds to wait for response from each serial device.
     **kwargs
         Keyword arguments to pass to `_available_devices()` function.
 
     Returns
     -------
     pd.DataFrame
-        Specified :data:`ports` table updated with ``baudrate``,
-        ``device_name``, and ``device_version`` columns.
-
-    Version log
-    -----------
-    .. versionchanged:: 0.47
-        Make ports argument optional.
-    .. versionchanged:: 0.51.2
-        Pass extra keyword arguments to `_available_devices()` function.
+        Specified ports table updated with baudrate, device_name, and
+        device_version columns.
     """
-    return _available_devices(ports=ports, baudrate=baudrate, timeout=timeout, **kwargs)
+    return _available_devices(ports=ports, baudrate=baudrate,
+                              timeout=timeout, **kwargs)
 
 
 @with_loop
-def read_device_id(**kwargs):
+def read_device_id(**kwargs) -> Coroutine:
     """
     Request device identifier from a serial device.
-
-    .. note::
-        Synchronous wrapper for :func:`_read_device_id`.
 
     Parameters
     ----------
@@ -157,8 +164,7 @@ def read_device_id(**kwargs):
     Returns
     -------
     dict
-        Specified :data:`kwargs` updated with ``device_name`` and
-        ``device_version`` items.
+        Specified kwargs updated with device_name and device_version items.
     """
     timeout = kwargs.pop('timeout', None)
     return asyncio.wait_for(_read_device_id(**kwargs), timeout=timeout)
