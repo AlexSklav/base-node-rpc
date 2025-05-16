@@ -133,7 +133,7 @@ class ProxyBase:
     def properties(self) -> pd.Series:
         """Get device properties."""
         properties = {
-            k: getattr(self, k)().tostring().decode('utf-8')
+            k: getattr(self, k)().tobytes().decode('utf-8')
             for k in ['base_node_software_version', 'package_name',
                      'display_name', 'manufacturer', 'url',
                      'software_version']
@@ -191,7 +191,7 @@ class I2cProxyMixin:
         """Send command via I2C."""
         response = self.proxy.i2c_request(
             self.address, list(map(ord, packet.data())))
-        return cPacket(data=response.tostring(), type_=PACKET_TYPES.DATA)
+        return cPacket(data=response.tobytes(), type_=PACKET_TYPES.DATA)
 
     def __del__(self) -> None:
         """Cleanup."""
@@ -635,7 +635,7 @@ class SerialProxyMixin:
             try:
                 timestamp, response = self.serial_thread.request(
                     self.queues['data'],
-                    packet.tostring(),
+                    packet.tobytes(),
                     timeout_s=timeout_s,
                     poll=poll
                 )
@@ -663,7 +663,7 @@ class ConfigMixinBase:
     def _config_pb(self) -> Any:
         """Get configuration protobuf."""
         return self.config_class.FromString(
-            self.serialize_config().tostring())
+            self.serialize_config().tobytes())
 
     @property
     def config(self) -> pd.Series:
@@ -761,7 +761,7 @@ class StateMixinBase:
     def _state_pb(self) -> Any:
         """Get state protobuf."""
         return self.state_class.FromString(
-            self.serialize_state().tostring())
+            self.serialize_state().tobytes())
 
     @property
     def state(self) -> pd.Series:

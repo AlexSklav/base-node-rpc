@@ -65,7 +65,7 @@ class TwiBootloader:
         Read ``twiboot`` version string.
         """
         self.proxy.i2c_write(self.bootloader_address, 0x01)
-        return self.proxy.i2c_read(self.bootloader_address, 16).tostring()
+        return self.proxy.i2c_read(self.bootloader_address, 16).tobytes()
 
     def read_chip_info(self) -> Dict:
         """
