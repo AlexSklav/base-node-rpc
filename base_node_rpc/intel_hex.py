@@ -51,7 +51,7 @@ def parse_intel_hex(data: str) -> pd.DataFrame:
 
     df_data = pd.DataFrame(matches)
     df_data.loc[:, ['record_type', 'address', 'byte_count', 'checksum']] = \
-        df_data[['record_type', 'address', 'byte_count', 'checksum']].applymap(lambda x: int(x, 16))
+        df_data[['record_type', 'address', 'byte_count', 'checksum']].map(lambda x: int(x, 16))
 
     # XXX We don't currently support [record types 2-5][1].
     # XXX We only currently support **contiguous** data sections.
