@@ -40,10 +40,10 @@ def get_handler_sig_info_frame(header, class_, *args, **kwargs) -> pd.DataFrame:
         arg_count, atom_type = df_i.iloc[0][['arg_count', 'atom_type']]
         if arg_count > 0:
             if not (df_i.atom_type == atom_type).all():
-                warnings.warn('[%d] Skipping method due to mixed argument types.')
+                warnings.warn(f'[{i}] Skipping method "{method_name}" due to mixed argument types.')
                 continue
         if not (df_i.return_atom_type == 'bool').all():
-            warnings.warn('[%d] Skipping method due to incorrect return type (should be `bool`).')
+            warnings.warn(f'[{i}] Skipping method "{method_name}" due to incorrect return type (should be `bool`).')
             continue
         frames.append(df_i)
     return pd.concat(frames)
