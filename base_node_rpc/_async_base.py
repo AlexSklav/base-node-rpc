@@ -6,7 +6,8 @@ import logging
 import threading
 import asyncserial
 import json_tricks
-from typing import Union, Optional, Dict, Any, List, Tuple
+
+from typing import Optional, Dict, Any
 
 import numpy as np
 import pandas as pd
@@ -104,6 +105,13 @@ async def _read_device_id(**kwargs) -> Dict[str, Any]:
         Specified :data:`kwargs` updated with ``device_name`` and
         ``device_version`` items.
 
+    Raises
+    ------
+    RuntimeError
+        If device doesn't respond or returns invalid packet.
+    IOError
+        If serial connection fails.
+
     Version log
     -----------
     .. versionchanged:: 0.51.1
@@ -113,13 +121,23 @@ async def _read_device_id(**kwargs) -> Dict[str, Any]:
     .. versionchanged:: 0.51.2
         Add ``settling_time_s`` keyword argument.
     """
-    settling_time_s = kwargs.pop('settling_time_s', 0)
+    settling_time_s = kwargs.pop('settling_time_s', 0.5)
     result = kwargs.copy()
 
-    with asyncserial.AsyncSerial(**kwargs) as async_device:
+    async with asyncserial.AsyncSerial(**kwargs) as async_device:
+        # Wait for device to settle
         await asyncio.sleep(settling_time_s)
+        
+        # Send ID request
         await async_device.write(ID_REQUEST)
+        
         while True:
+            if not async_device.in_waiting:
+                # Add small delay to ensure bytes show up
+                await asyncio.sleep(0.01)
+                continue
+            
+            # Read and parse packet
             packet = await read_packet(async_device)
             if not hasattr(packet, 'type_'):
                 raise RuntimeError('Error reading packet from serial device.')
@@ -130,6 +148,8 @@ async def _read_device_id(**kwargs) -> Dict[str, Any]:
             result['device_name'] = name.decode('utf-8')
         except UnicodeDecodeError:
             result['device_name'] = name
+        
+        # Decode version
         try:
             result['device_version'] = version.decode('utf-8')
         except UnicodeDecodeError:
@@ -142,7 +162,8 @@ async def _available_devices(
     ports: Optional[pd.DataFrame] = None,
     baudrate: Optional[int] = 9600,
     timeout: Optional[float] = None,
-    settling_time_s: Optional[float] = 0.
+    settling_time_s: Optional[float] = 0.,
+    **kwargs
 ) -> pd.DataFrame:
     """
     Request list of available serial devices, including device identifier (if
@@ -181,8 +202,14 @@ async def _available_devices(
     .. versionchanged:: 0.51.2
         Add ``settling_time_s`` keyword argument.
     """
+    skip_vid = kwargs.pop('skip_vid', None)
+    skip_pid = kwargs.pop('skip_pid', None)
+    skip_descriptor = kwargs.pop('skip_descriptor', ['usb uart'])
     if ports is None:
-        ports = sd.comports(only_available=True)
+        ports = sd.comports(only_available=True,
+                            skip_vid=skip_vid,
+                            skip_pid=skip_pid,
+                            skip_descriptor=skip_descriptor)
 
     if not ports.shape[0]:
         return ports
@@ -247,31 +274,49 @@ async def _async_serial_keepalive(
     """
     port = None
     parent.connected_event.clear()
-    while not parent.stop_event.wait(.01):
-        try:
-            with asyncserial.AsyncSerial(*args, **kwargs) as async_device:
-                _L().info(f'Connected to {async_device.port}')
-                parent.disconnected_event.clear()
-                parent.connected_event.set()
-                parent.device = async_device
-                port = async_device.port
-                while async_device.is_open:
-                    try:
-                        assert async_device.in_waiting >= 0
-                    except (serial.SerialException, OSError):
-                        break
-                    else:
-                        await asyncio.sleep(.01)
-            _L().info(f'Disconnected from {port}')
-        except serial.SerialException as e:
-            _L().debug(f"Serial exception while connecting to port: {e}")
-        except Exception as e:
-            _L().error(f"Unexpected error during serial connection: {e}",
-                       exc_info=True)
+    
+    try:
+        while not parent.stop_event.wait(.01):
+            try:
+                async with asyncserial.AsyncSerial(*args, **kwargs) as async_device:
+                    _L().info(f'Connected to {async_device.port}')
+
+                    parent.disconnected_event.clear()
+                    parent.connected_event.set()
+                    parent.device = async_device
+                    port = async_device.port
+                    
+                    # Monitor connection while stop_event is not set
+                    while async_device.is_open and not parent.stop_event.is_set():
+                        try:
+                            assert async_device.in_waiting >= 0
+                        except (serial.SerialException, OSError):
+                            _L().debug(f'Serial connection lost for {port}')
+                            break
+                        else:
+                            await asyncio.sleep(.01)
+                    
+                    _L().info(f'Disconnected from {port}')
+                    
+            except serial.SerialException as e:
+                _L().debug(f"Serial exception while connecting to port: {e}")
+            except Exception as e:
+                _L().error(f"Unexpected error during serial connection: {e}",
+                           exc_info=True)
+            
+            # Always set disconnected_event after exiting context manager
+            parent.disconnected_event.set()
+            parent.connected_event.clear()
+            
+            # If stop requested, break immediately
+            if parent.stop_event.is_set():
+                break
+                
+    finally:
+        # Ensure events are in correct state when exiting
+        parent.connected_event.clear()
         parent.disconnected_event.set()
-    parent.connected_event.clear()
-    parent.disconnected_event.set()
-    _L().info(f'Stopped monitoring {port}')
+        _L().info(f'Stopped monitoring {port}')
 
 
 class AsyncSerialMonitor(threading.Thread):
@@ -360,12 +405,34 @@ class AsyncSerialMonitor(threading.Thread):
             _async_serial_keepalive(self, *self.args, **self.kwargs))
 
     def stop(self) -> None:
+        """Stop the serial monitor and wait for cleanup."""
+        _L().debug('Stopping serial monitor...')
         self.stop_event.set()
+        
+        # Try to close device gracefully
         try:
-            self.device.close()
-        except Exception:
-            pass
-        self.disconnected_event.wait()
+            if self.device is not None:
+                self.device.close()
+                _L().debug('Device closed')
+        except Exception as e:
+            _L().debug(f'Error closing device: {e}')
+        
+        # Wait for disconnected event with timeout
+        if not self.disconnected_event.wait(timeout=2.0):
+            _L().warning('Timeout waiting for disconnected event, forcing cleanup')
+            
+            # Force cleanup if timeout occurs
+            if self.loop is not None and not self.loop.is_closed():
+                try:
+                    # Cancel all tasks in the loop
+                    for task in asyncio.all_tasks(self.loop):
+                        task.cancel()
+                    _L().debug('Cancelled all tasks')
+                except Exception as e:
+                    _L().debug(f'Error cancelling tasks: {e}')
+            
+            # Set the disconnected event manually
+            self.disconnected_event.set()
 
     def __enter__(self) -> 'AsyncSerialMonitor':
         self.start()
@@ -382,7 +449,10 @@ class BaseNodeSerialMonitor(AsyncSerialMonitor):
         self.signals = blinker.Namespace()
 
     def listen(self) -> None:
-        _L().info('listening')
+        """Start listening for serial data and process packets."""
+        _L().info('Starting BaseNodeSerialMonitor listener')
+        
+        # Create new event loop for this thread
         self.loop = asyncio.new_event_loop()
         asyncio.set_event_loop(self.loop)
 
@@ -390,17 +460,18 @@ class BaseNodeSerialMonitor(AsyncSerialMonitor):
         tasks = []
         
         try:
-            # Create the tasks
-            read_task = asyncio.ensure_future(self.read_packets(),
-                                              loop=self.loop)
-            keepalive_task = asyncio.ensure_future(
-                _async_serial_keepalive(self, *self.args, **self.kwargs),
-                loop=self.loop)
+            # Create the tasks (without deprecated loop parameter)
+            read_task = self.loop.create_task(self.read_packets())
+            keepalive_task = self.loop.create_task(
+                _async_serial_keepalive(self, *self.args, **self.kwargs))
             tasks = [read_task, keepalive_task]
+            
+            _L().debug(f'Created {len(tasks)} monitoring tasks')
             
             # Run until complete or cancelled
             self.loop.run_until_complete(
                 asyncio.gather(*tasks, return_exceptions=True))
+                
         except asyncio.CancelledError:
             _L().debug("Tasks were cancelled")
         except Exception as e:
@@ -417,11 +488,15 @@ class BaseNodeSerialMonitor(AsyncSerialMonitor):
                 try:
                     self.loop.run_until_complete(
                         asyncio.wait(tasks, timeout=1.0))
-                except Exception:
-                    pass
+                except Exception as e:
+                    _L().debug(f'Error waiting for tasks to complete: {e}')
                     
             # Close the loop
-            self.loop.close()
+            try:
+                self.loop.close()
+                _L().debug('Event loop closed')
+            except Exception as e:
+                _L().debug(f'Error closing event loop: {e}')
 
     def request(self, request: bytes, *args: Any, **kwargs: Any) -> cPacket:
         """

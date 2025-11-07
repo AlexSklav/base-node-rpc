@@ -28,13 +28,13 @@ requirements:
     - nadamq
     - jinja2
     - blinker
-    - protobuf
+    - protobuf 5.29.*
     - or-event
     - platformio
-    - asyncserial
+    - asyncserial >=0.3.2
     - json-tricks
     - arduino-rpc
-    - serial-device
+    - serial-device >=0.12.2
     - path-helpers
     - clang-helpers
     - logging-helpers
@@ -62,13 +62,13 @@ outputs:
         - nadamq
         - jinja2
         - blinker
-        - protobuf
+        - protobuf 5.29.*
         - or-event
         - platformio
-        - asyncserial
+        - asyncserial >=0.3.2
         - json-tricks
         - arduino-rpc
-        - serial-device
+        - serial-device >=0.12.2
         - path-helpers
         - clang-helpers
         - logging-helpers

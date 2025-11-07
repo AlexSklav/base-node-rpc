@@ -12,15 +12,38 @@ from ._async_base import BaseNodeSerialMonitor, _available_devices, _read_device
 
 
 def new_file_event_loop() -> asyncio.AbstractEventLoop:
-    """Create a new event loop appropriate for the current platform."""
+    """
+    Create a new event loop appropriate for the current platform.
+    
+    Returns
+    -------
+    asyncio.AbstractEventLoop
+        ProactorEventLoop on Windows for better I/O performance,
+        default event loop on other platforms.
+    """
     if platform.system() == 'Windows':
         return asyncio.ProactorEventLoop()
     return asyncio.new_event_loop()
 
 
 def ensure_event_loop() -> asyncio.AbstractEventLoop:
-    """Ensure there is a valid event loop in the current thread."""
+    """
+    Ensure there is a valid event loop in the current thread.
+    
+    Returns
+    -------
+    asyncio.AbstractEventLoop
+        The current event loop, or a newly created one if none exists.
+    """
     try:
+        # Try to get running loop first (modern approach)
+        try:
+            loop = asyncio.get_running_loop()
+            return loop
+        except RuntimeError:
+            pass  # No running loop, continue to get_event_loop
+        
+        # Get current event loop (may be deprecated in future Python versions)
         loop = asyncio.get_event_loop()
         if loop.is_closed():
             loop = new_file_event_loop()
@@ -73,8 +96,8 @@ def with_loop(func: callable) -> callable:
                 asyncio.set_event_loop(new_loop)
                 
                 try:
-                    result = new_loop.run_until_complete(
-                        asyncio.ensure_future(generator))
+                    # Use create_task instead of ensure_future (more modern)
+                    result = new_loop.run_until_complete(generator)
                 except Exception as e:
                     finished.result = None
                     finished.error = e
@@ -95,14 +118,18 @@ def with_loop(func: callable) -> callable:
                         # Stop the loop before closing it
                         new_loop.stop()
                         new_loop.close()
-                        _L().debug('closed event loop')
+                        _L().debug('Closed event loop')
                     except Exception as e:
                         _L().debug(f'Error closing event loop: {e}')
-                    finished.set()
+                    finally:
+                        finished.set()
 
-            thread = threading.Thread(target=_run,
-                                      args=(func(*args, **kwargs),))
-            thread.daemon = True
+            thread = threading.Thread(
+                target=_run,
+                args=(func(*args, **kwargs),),
+                daemon=True,
+                name="AsyncSerialWorker"
+            )
             thread.start()
             finished.wait()
             if finished.error is not None:
@@ -157,6 +184,7 @@ def read_device_id(**kwargs) -> Coroutine:
     ----------
     timeout : float, optional
         Number of seconds to wait for response from a serial device.
+        If not specified, will wait indefinitely.
     **kwargs
         Keyword arguments to pass to :class:`asyncserial.AsyncSerial`
         initialization function.
@@ -165,6 +193,16 @@ def read_device_id(**kwargs) -> Coroutine:
     -------
     dict
         Specified kwargs updated with device_name and device_version items.
+    
+    Raises
+    ------
+    asyncio.TimeoutError
+        If timeout is specified and device doesn't respond in time.
     """
     timeout = kwargs.pop('timeout', None)
-    return asyncio.wait_for(_read_device_id(**kwargs), timeout=timeout)
+    coro = _read_device_id(**kwargs)
+    
+    # Only use wait_for if timeout is specified
+    if timeout is not None:
+        return asyncio.wait_for(coro, timeout=timeout)
+    return coro
