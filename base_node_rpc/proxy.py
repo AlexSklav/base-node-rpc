@@ -1,6 +1,5 @@
 # coding: utf-8
 import sys
-import time
 import queue
 import blinker
 import logging
@@ -88,12 +87,44 @@ class ProxyBase:
 
     @property
     def host_software_version(self) -> str:
-        # Get host software version from the module's __version__ attribute
-        # (see PEP 396[1]).
-        #
-        # [1]: https://www.python.org/dev/peps/pep-0396/
-        exec(f"from {self.__module__.split('.')[0]} import __version__ as host_version")
-        return metadata.version(host_version)
+        """
+        Get host software version from the module's package.
+        
+        Returns
+        -------
+        str
+            Version string of the host package
+            
+        Note
+        ----
+        Tries multiple methods to get version info safely (no exec!):
+        1. importlib.metadata (for installed packages)
+        2. Direct __version__ import from package module
+        """
+        import importlib
+        
+        # Get the package name from the module path
+        package_name = self.__module__.split('.')[0]
+        
+        # Method 1: Try importlib.metadata (for properly installed packages)
+        try:
+            return metadata.version(package_name)
+        except metadata.PackageNotFoundError:
+            pass  # Fall through to next method
+        
+        # Method 2: Try to import __version__ from package (safe alternative to exec)
+        try:
+            package_module = importlib.import_module(package_name)
+            if hasattr(package_module, '__version__'):
+                return package_module.__version__
+        except ImportError as e:
+            logger.debug(f"Could not import package {package_name}: {e}")
+        except Exception as e:
+            logger.debug(f"Error accessing __version__ from {package_name}: {e}")
+        
+        # Method 3: Fallback - return unknown
+        logger.warning(f"Could not determine version for package {package_name}")
+        return "unknown"
 
     @property
     def remote_software_version(self) -> str:
@@ -512,9 +543,13 @@ class SerialProxyMixin:
 
         for port_i in ports:
             try:
+                # Timeout should be settling_time + reasonable buffer for device response
+                # Default to at least 5 seconds total to allow for slow devices
+                device_timeout = max(settling_time_s * 2 + 1.0, 5.0)
+                
                 device_id = read_device_id(
                     port=port_i,
-                    timeout=2 * settling_time_s,
+                    timeout=device_timeout,
                     settling_time_s=settling_time_s,
                     baudrate=baudrate
                 )
@@ -557,11 +592,9 @@ class SerialProxyMixin:
                 )
                 logger.debug(f'Wait for connection to port {port_i}')
                 event.wait(timeout=2.0)  # Short timeout for connection
-                
+
                 if self.serial_thread.error.is_set():
                     raise self.serial_thread.error.exception
-
-                time.sleep(settling_time_s)
 
                 try:
                     self.ram_free()
@@ -588,9 +621,20 @@ class SerialProxyMixin:
         raise IOError('Device not found on any port.')
 
     def terminate(self) -> None:
-        """Terminate the serial connection."""
+        """
+        Terminate the serial connection gracefully.
+        
+        Closes the serial thread and cleans up resources.
+        """
         if self.serial_thread is not None:
-            self.serial_thread.__exit__()
+            try:
+                # Properly close the serial thread using context manager exit
+                self.serial_thread.__exit__(None, None, None)
+                logger.debug('Serial thread terminated')
+            except Exception as e:
+                logger.error(f'Error terminating serial thread: {e}')
+            finally:
+                self.serial_thread = None
 
     def _send_command(self,
                      packet: cPacket,

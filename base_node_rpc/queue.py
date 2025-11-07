@@ -367,7 +367,15 @@ class PacketWatcher(Thread):
         bool
             Whether any data was read from the stream
         """
-        self.message_parser.parse_available(self.stream)
+        try:
+            data = self.stream.read()
+            if data:
+                self.message_parser.parse(data)
+                return True
+            return False
+        except Exception as e:
+            logger.debug(f"Error reading from stream: {e}")
+            return False
 
     @property
     def queues(self) -> pd.Series:
