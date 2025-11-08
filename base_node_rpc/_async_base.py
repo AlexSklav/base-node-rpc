@@ -2,7 +2,6 @@
 import serial
 import blinker
 import asyncio
-import logging
 import threading
 import asyncserial
 import json_tricks
@@ -21,8 +20,6 @@ from nadamq.NadaMq import (cPacket, cPacketParser, PACKET_TYPES,
 __all__ = ['read_packet', '_read_device_id', '_available_devices',
            '_async_serial_keepalive', 'AsyncSerialMonitor',
            'BaseNodeSerialMonitor']
-
-logger = logging.getLogger(__name__)
 
 ID_REQUEST = cPacket(type_=PACKET_TYPES.ID_REQUEST).tobytes()
 
@@ -77,8 +74,8 @@ async def read_packet(serial_: serial.Serial) -> Optional[cPacket]:
                 parser.reset()
                 _L().debug('Error parsing packet, resetting parser')
                 result = False
-    except Exception as e:
-        _L().error(f'Fatal error in read_packet: {e}', exc_info=True)
+    except Exception:
+        _L().error('Fatal error in read_packet', exc_info=True)
         return None
         
     return result
@@ -202,14 +199,13 @@ async def _available_devices(
     .. versionchanged:: 0.51.2
         Add ``settling_time_s`` keyword argument.
     """
-    skip_vid = kwargs.pop('skip_vid', None)
-    skip_pid = kwargs.pop('skip_pid', None)
-    skip_descriptor = kwargs.pop('skip_descriptor', ['usb uart'])
+    extra_args = {f'skip_{arg}' : kwargs.pop(f'skip_{arg}', None)
+                  for arg in ['vid', 'pid', 'descriptor']}
+    # FTDI devices reset when tried
+    extra_args['skip_manufacturer'] = kwargs.pop('skip_manufacturer', ['ftdi'])
     if ports is None:
         ports = sd.comports(only_available=True,
-                            skip_vid=skip_vid,
-                            skip_pid=skip_pid,
-                            skip_descriptor=skip_descriptor)
+                            **extra_args)
 
     if not ports.shape[0]:
         return ports
@@ -242,6 +238,7 @@ async def _available_devices(
         df_results = pd.DataFrame(results).set_index('port')
         df_results = ports.join(df_results)
     else:
+        ports['device_name'] = None
         df_results = ports
 
     return df_results
@@ -274,11 +271,11 @@ async def _async_serial_keepalive(
     """
     port = None
     parent.connected_event.clear()
-    
+    warned = False
     try:
         while not parent.stop_event.wait(.01):
             try:
-                async with asyncserial.AsyncSerial(*args, **kwargs) as async_device:
+                async with asyncserial.AsyncSerial(*args, warned=warned, **kwargs) as async_device:
                     _L().info(f'Connected to {async_device.port}')
 
                     parent.disconnected_event.clear()
@@ -294,19 +291,21 @@ async def _async_serial_keepalive(
                             _L().debug(f'Serial connection lost for {port}')
                             break
                         else:
+                            warned = False
                             await asyncio.sleep(.01)
                     
                     _L().info(f'Disconnected from {port}')
                     
             except serial.SerialException as e:
                 _L().debug(f"Serial exception while connecting to port: {e}")
-            except Exception as e:
-                _L().error(f"Unexpected error during serial connection: {e}",
+                warned = True
+            except Exception:
+                _L().error("Unexpected error during serial connection",
                            exc_info=True)
-            
-            # Always set disconnected_event after exiting context manager
-            parent.disconnected_event.set()
-            parent.connected_event.clear()
+            finally:
+                # Always set disconnected_event after exiting context manager
+                parent.disconnected_event.set()
+                parent.connected_event.clear()
             
             # If stop requested, break immediately
             if parent.stop_event.is_set():
@@ -416,7 +415,7 @@ class AsyncSerialMonitor(threading.Thread):
                 _L().debug('Device closed')
         except Exception as e:
             _L().debug(f'Error closing device: {e}')
-        
+
         # Wait for disconnected event with timeout
         if not self.disconnected_event.wait(timeout=2.0):
             _L().warning('Timeout waiting for disconnected event, forcing cleanup')
@@ -429,7 +428,7 @@ class AsyncSerialMonitor(threading.Thread):
                         task.cancel()
                     _L().debug('Cancelled all tasks')
                 except Exception as e:
-                    _L().debug(f'Error cancelling tasks: {e}')
+                    _L().debug(f'Error during cleanup: {e}')
             
             # Set the disconnected event manually
             self.disconnected_event.set()
@@ -474,8 +473,8 @@ class BaseNodeSerialMonitor(AsyncSerialMonitor):
                 
         except asyncio.CancelledError:
             _L().debug("Tasks were cancelled")
-        except Exception as e:
-            _L().error(f"Error in BaseNodeSerialMonitor.listen: {e}",
+        except Exception:
+            _L().error("Error in BaseNodeSerialMonitor.listen",
                        exc_info=True)
         finally:
             # Ensure all tasks are properly cancelled
@@ -624,6 +623,7 @@ class BaseNodeSerialMonitor(AsyncSerialMonitor):
                             parser.reset()
             except Exception:
                 if self.stop_event.is_set():
+                    L.debug('Stop event set during exception, exiting')
                     break
                 L.debug('error reading packet', exc_info=True)
                 await asyncio.sleep(.01)
