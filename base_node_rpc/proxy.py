@@ -2,30 +2,28 @@
 import sys
 import queue
 import blinker
-import logging
 import warnings
 import threading
+
 from typing import Optional, Any, Type
 
-import serial
-import serial.threaded
 import pandas as pd
+import serial.threaded
 import serial_device as sd
 import serial_device.threaded
 import importlib.metadata as metadata
 
-from arduino_rpc.protobuf import resolve_field_values, PYTYPE_MAP
-from nadamq.NadaMq import cPacket, PACKET_TYPES
 from or_event import OrEvent
-
+from logging_helpers import _L
+from nadamq.NadaMq import cPacket, PACKET_TYPES
+from arduino_rpc.protobuf import resolve_field_values, PYTYPE_MAP
 from .queue import PacketQueueManager
 from .ser_async import available_devices, read_device_id
+
 from ._version import get_versions
 
 __version__ = get_versions()['version']
 del get_versions
-
-logger = logging.getLogger(__name__)
 
 
 class DeviceNotFound(Exception):
@@ -89,12 +87,12 @@ class ProxyBase:
     def host_software_version(self) -> str:
         """
         Get host software version from the module's package.
-        
+
         Returns
         -------
         str
             Version string of the host package
-            
+
         Note
         ----
         Tries multiple methods to get version info safely (no exec!):
@@ -102,28 +100,28 @@ class ProxyBase:
         2. Direct __version__ import from package module
         """
         import importlib
-        
+
         # Get the package name from the module path
         package_name = self.__module__.split('.')[0]
-        
+
         # Method 1: Try importlib.metadata (for properly installed packages)
         try:
             return metadata.version(package_name)
         except metadata.PackageNotFoundError:
             pass  # Fall through to next method
-        
+
         # Method 2: Try to import __version__ from package (safe alternative to exec)
         try:
             package_module = importlib.import_module(package_name)
             if hasattr(package_module, '__version__'):
                 return package_module.__version__
         except ImportError as e:
-            logger.debug(f"Could not import package {package_name}: {e}")
+            _L().debug(f"Could not import package {package_name}: {e}")
         except Exception as e:
-            logger.debug(f"Error accessing __version__ from {package_name}: {e}")
-        
+            _L().debug(f"Error accessing __version__ from {package_name}: {e}")
+
         # Method 3: Fallback - return unknown
-        logger.warning(f"Could not determine version for package {package_name}")
+        _L().warning(f"Could not determine version for package {package_name}")
         return "unknown"
 
     @property
@@ -372,13 +370,13 @@ class SerialProxyMixin:
         """
         Callback called if/when a device is reconnected to port after lost connection.
         """
-        logger.debug(f'Reconnected to `{protocol.port}`')
+        _L().debug(f'Reconnected to `{protocol.port}`')
 
     def connection_lost(self,
                        protocol: serial.threaded.Protocol,
                        exception: Exception) -> None:
         """Callback called if/when serial connection is lost."""
-        logger.debug(f'Connection lost `{protocol.port}`')
+        _L().debug(f'Connection lost `{protocol.port}`')
 
     def _connect(self,
                 port: Optional[str] = None,
@@ -499,7 +497,7 @@ class SerialProxyMixin:
                         {'event': 'data_received', 'data': data}
                     )
                 except Exception as e:
-                    logger.error(f"Error processing received data: {e}")
+                    _L().error(f"Error processing received data: {e}")
 
             def connection_lost(self, exception):
                 try:
@@ -509,7 +507,7 @@ class SerialProxyMixin:
                         {'event': 'disconnected', 'exception': exception}
                     )
                 except Exception as e:
-                    logger.error(f"Error handling connection loss: {e}")
+                    _L().error(f"Error handling connection loss: {e}")
 
         device_name = getattr(self, 'device_name', None)
 
@@ -546,7 +544,7 @@ class SerialProxyMixin:
                 # Timeout should be settling_time + reasonable buffer for device response
                 # Default to at least 5 seconds total to allow for slow devices
                 device_timeout = max(settling_time_s * 2 + 1.0, 5.0)
-                
+
                 device_id = read_device_id(
                     port=port_i,
                     timeout=device_timeout,
@@ -563,7 +561,7 @@ class SerialProxyMixin:
                     elif not (device_id.get('device_version') ==
                             getattr(self, 'device_version', None)):
                         if DeviceVersionMismatch in ignore:
-                            logger.warning(
+                            _L().warning(
                                 f"Device driver version ({self.device_version}) "
                                 f"does not match version reported by device "
                                 f"({device_id.get('device_version')})."
@@ -573,7 +571,7 @@ class SerialProxyMixin:
                                 self, device_id.get('device_version')
                             )
 
-                logger.debug(
+                _L().debug(
                     f'Attempt to connect to device on port {port_i} '
                     f'(baudrate={baudrate})'
                 )
@@ -590,7 +588,7 @@ class SerialProxyMixin:
                     self.serial_thread.closed,
                     self.serial_thread.connected
                 )
-                logger.debug(f'Wait for connection to port {port_i}')
+                _L().debug(f'Wait for connection to port {port_i}')
                 event.wait(timeout=2.0)  # Short timeout for connection
 
                 if self.serial_thread.error.is_set():
@@ -601,21 +599,21 @@ class SerialProxyMixin:
                     if device_id is None:
                         properties = self.properties
                         device_id = {'device_name': properties['package_name']}
-                    
-                    logger.info(
+
+                    _L().info(
                         f"Successfully connected to {device_id['device_name']} "
                         f"on port {port_i}"
                     )
                     self.device_verified.set()
                     return
                 except IOError:
-                    logger.debug(f'Connection unsuccessful on port {port_i}')
+                    _L().debug(f'Connection unsuccessful on port {port_i}')
                     continue
                 except Exception as e:
-                    logger.warning(f"Failed to connect to port {port_i}: {e}")
+                    _L().warning(f"Failed to connect to port {port_i}: {e}")
                     continue
             except Exception as e:
-                logger.warning(f"Failed to connect to port {port_i}: {e}")
+                _L().warning(f"Failed to connect to port {port_i}: {e}")
                 continue
 
         raise IOError('Device not found on any port.')
@@ -623,16 +621,16 @@ class SerialProxyMixin:
     def terminate(self) -> None:
         """
         Terminate the serial connection gracefully.
-        
+
         Closes the serial thread and cleans up resources.
         """
         if self.serial_thread is not None:
             try:
                 # Properly close the serial thread using context manager exit
                 self.serial_thread.__exit__(None, None, None)
-                logger.debug('Serial thread terminated')
+                _L().debug('Serial thread terminated')
             except Exception as e:
-                logger.error(f'Error terminating serial thread: {e}')
+                _L().error(f'Error terminating serial thread: {e}')
             finally:
                 self.serial_thread = None
 
