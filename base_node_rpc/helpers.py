@@ -181,6 +181,17 @@ def generate_validate_header(lib_options: Dict, py_proto_module_name: str, sketc
         # Add stub `stdint.h` header to includes path.
         args = ['-DSTDINT_STUB']
         include_paths = [STDINT_STUB_PATH, lib_dir.realpath(), C_ARRAY_DEFS_PATH]
+
+        # Auto-discover Arduino library include directories.
+        arduino_include_root = pioh.conda_arduino_include_path()
+        if arduino_include_root.isdir():
+            for lib_name in sorted(arduino_include_root.listdir()):
+                src_dir = lib_name.joinpath('src')
+                if src_dir.isdir():
+                    include_paths.append(src_dir)
+                else:
+                    include_paths.append(lib_name)
+
         args += [f'-I{p}' for p in include_paths]
 
         validator_code = get_handler_validator_class_code(input_headers, input_classes, message_type, *args)
@@ -281,6 +292,17 @@ def generate_command_processor_header(lib_options: Dict) -> None:
         # Add stub `stdint.h` header to includes path.
         args = ['-DSTDINT_STUB']
         include_paths = [STDINT_STUB_PATH, lib_dir.realpath(), C_ARRAY_DEFS_PATH]
+
+        # Auto-discover Arduino library include directories.
+        arduino_include_root = pioh.conda_arduino_include_path()
+        if arduino_include_root.isdir():
+            for lib_name in sorted(arduino_include_root.listdir()):
+                src_dir = lib_name.joinpath('src')
+                if src_dir.isdir():
+                    include_paths.append(src_dir)
+                else:
+                    include_paths.append(lib_name)
+
         args += [f'-I{p}' for p in include_paths]
 
         get_df_code = lambda *args_: ((C_GENERATED_WARNING_MESSAGE.format(datetime.now())) +
@@ -320,6 +342,18 @@ def generate_python_code(lib_options: Dict) -> None:
     # Add stub `stdint.h` header to the 'include' path.
     args = ['-DSTDINT_STUB']
     include_paths = [STDINT_STUB_PATH, lib_dir.realpath(), C_ARRAY_DEFS_PATH]
+
+    # Auto-discover Arduino library include directories so clang can resolve
+    # #include directives for dependencies (e.g., <TeensyMinimalRpc/DMA.h>).
+    arduino_include_root = pioh.conda_arduino_include_path()
+    if arduino_include_root.isdir():
+        for lib_name in sorted(arduino_include_root.listdir()):
+            src_dir = lib_name.joinpath('src')
+            if src_dir.isdir():
+                include_paths.append(src_dir)
+            else:
+                include_paths.append(lib_name)
+
     args += [f'-I{p}' for p in include_paths]
 
     write_code(input_headers, input_classes, output_file, python_code_gen,
