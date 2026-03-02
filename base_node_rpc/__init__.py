@@ -45,7 +45,7 @@ def get_includes() -> List[path]:
 
         import arduino_rpc
         ...
-        print ' '.join(['-I%s' % i for i in arduino_rpc.get_includes()])
+        print(' '.join(['-I%s' % i for i in arduino_rpc.get_includes()]))
         ...
 
     """

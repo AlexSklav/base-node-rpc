@@ -24,6 +24,7 @@ build:
 requirements:
   build:
     - python {{ python }}
+    - setuptools
     - numpy
     - nadamq
     - jinja2

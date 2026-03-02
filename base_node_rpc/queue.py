@@ -328,7 +328,7 @@ class PacketWatcher(Thread):
         self.max_delay_seconds = max_delay_seconds
         self._current_delay = delay_seconds
         self._consecutive_empty_reads = 0
-        super(PacketWatcher, self).__init__()
+        super().__init__()
         self.daemon = True
 
     def run(self) -> None:

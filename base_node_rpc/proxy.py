@@ -340,7 +340,7 @@ class SerialProxyMixin:
         self.serial_thread = None
         self._command_lock = threading.Lock()
 
-        super(SerialProxyMixin, self).__init__(**kwargs)
+        super().__init__(**kwargs)
 
         # Event to indicate that device has been connected to and correctly
         # identified.
@@ -480,7 +480,7 @@ class SerialProxyMixin:
 
         class PacketProtocol(sd.threaded.EventProtocol):
             def connection_made(self, transport):
-                super(PacketProtocol, self).connection_made(transport)
+                super().connection_made(transport)
                 if parent.device_verified.is_set():
                     # Device identity has been previously verified.
                     # Must be reconnecting after lost connection.
@@ -501,7 +501,7 @@ class SerialProxyMixin:
 
             def connection_lost(self, exception):
                 try:
-                    super(PacketProtocol, self).connection_lost(exception)
+                    super().connection_lost(exception)
                     parent.connection_lost(self, exception)
                     parent.serial_signals.signal('disconnected').send(
                         {'event': 'disconnected', 'exception': exception}
@@ -756,7 +756,7 @@ class ConfigMixinBase:
         return_code = super().update_config(config_pb)
 
         if save:
-            super(ConfigMixinBase, self).save_config()
+            super().save_config()
 
         return return_code
 
