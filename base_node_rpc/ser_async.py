@@ -3,7 +3,7 @@ import asyncio
 import platform
 import threading
 from functools import wraps
-from typing import Optional, Coroutine, Any
+from typing import Callable, Optional, Coroutine, Any
 
 import pandas as pd
 from logging_helpers import _L
@@ -57,7 +57,7 @@ def ensure_event_loop() -> asyncio.AbstractEventLoop:
     return loop
 
 
-def with_loop(func: callable) -> callable:
+def with_loop(func: Callable) -> Callable:
     """
     Decorator to run function within an asyncio event loop.
 

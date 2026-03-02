@@ -213,8 +213,8 @@ async def _available_devices(
     # Create tasks for each port with individual timeouts
     tasks = []
     for name_i in ports.index:
-        task = asyncio.ensure_future(
-            _read_device_id(port=name_i, baudrate=baudrate, 
+        task = asyncio.create_task(
+            _read_device_id(port=name_i, baudrate=baudrate,
                             settling_time_s=settling_time_s))
         if timeout is not None:
             task = asyncio.wait_for(task, timeout=timeout)
@@ -443,7 +443,7 @@ class AsyncSerialMonitor(threading.Thread):
 
 class BaseNodeSerialMonitor(AsyncSerialMonitor):
     def __init__(self, *args: Any, **kwargs: Any) -> None:
-        super(BaseNodeSerialMonitor, self).__init__(*args, **kwargs)
+        super().__init__(*args, **kwargs)
         self._request_queue = None
         self.signals = blinker.Namespace()
 
@@ -486,7 +486,7 @@ class BaseNodeSerialMonitor(AsyncSerialMonitor):
             if tasks:
                 try:
                     self.loop.run_until_complete(
-                        asyncio.wait(tasks, timeout=1.0))
+                        asyncio.gather(*tasks, return_exceptions=True))
                 except Exception as e:
                     _L().debug(f'Error waiting for tasks to complete: {e}')
                     
@@ -526,11 +526,12 @@ class BaseNodeSerialMonitor(AsyncSerialMonitor):
         retry_count = 0
         future = asyncio.run_coroutine_threadsafe(self.arequest(request),
                                                   loop=self.loop)
-        
+
         while retry_count < max_retries:
             try:
                 return future.result(*args, **kwargs)
             except TimeoutError:
+                future.cancel()
                 retry_count += 1
                 if retry_count >= max_retries:
                     _L().warning(f'Max retries ({max_retries}) reached waiting for response')
