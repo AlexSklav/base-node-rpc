@@ -605,7 +605,12 @@ class BaseNodeSerialMonitor(AsyncSerialMonitor):
                         data = await self.device.read(8 << 10)
                     except (AttributeError, serial.SerialException,
                             IOError, OSError):
-                        if (self.stop_event.is_set() or
+                        if self.stop_event.is_set():
+                            break
+                        # Device not yet connected (None) — wait for
+                        # keepalive task to establish connection.
+                        # Device connected but closed — hot-unplug.
+                        if (self.device is not None and
                                 not getattr(self.device, 'is_open', False)):
                             break
                         await asyncio.sleep(.01)
