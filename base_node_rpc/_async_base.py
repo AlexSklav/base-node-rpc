@@ -213,23 +213,14 @@ async def _available_devices(
     # Create tasks for each port with individual timeouts
     tasks = []
     for name_i in ports.index:
-        task = asyncio.create_task(
-            _read_device_id(port=name_i, baudrate=baudrate,
-                            settling_time_s=settling_time_s))
+        coro = _read_device_id(port=name_i, baudrate=baudrate,
+                               settling_time_s=settling_time_s)
         if timeout is not None:
-            task = asyncio.wait_for(task, timeout=timeout)
-        tasks.append(task)
+            coro = asyncio.wait_for(coro, timeout=timeout)
+        tasks.append(coro)
 
-    # Run all tasks
-    try:
-        results = await asyncio.gather(*tasks, return_exceptions=True)
-    except asyncio.TimeoutError:
-        # If timeout occurs, cancel all pending tasks
-        for task in tasks:
-            if not task.done():
-                task.cancel()
-        results = [task.result() for task in tasks 
-                   if task.done() and not task.cancelled()]
+    # Run all tasks (return_exceptions=True so gather never raises)
+    results = await asyncio.gather(*tasks, return_exceptions=True)
 
     # Filter out exceptions and None results
     results = [result for result in results if isinstance(result, dict)]
