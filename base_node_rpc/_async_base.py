@@ -369,13 +369,13 @@ class AsyncSerialMonitor(threading.Thread):
 
         def wrapper(f, signal_name):
             f()
-            self.serial_signals.signal(signal_name, {'event': signal_name})
+            self.serial_signals.signal(signal_name).send(
+                {'event': signal_name})
 
         def connected_wrapper(f):
             f()
-            self.serial_signals.signal('connected',
-                                       {'event': 'connected',
-                                        'device': self.device})
+            self.serial_signals.signal('connected').send(
+                {'event': 'connected', 'device': self.device})
 
         self.connected_event.set = ft.partial(connected_wrapper,
                                               self.connected_event.set)
