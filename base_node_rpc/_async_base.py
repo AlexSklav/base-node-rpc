@@ -603,7 +603,11 @@ class BaseNodeSerialMonitor(AsyncSerialMonitor):
                 while result is False:
                     try:
                         data = await self.device.read(8 << 10)
-                    except (AttributeError, serial.SerialException):
+                    except (AttributeError, serial.SerialException,
+                            IOError, OSError):
+                        if (self.stop_event.is_set() or
+                                not getattr(self.device, 'is_open', False)):
+                            break
                         await asyncio.sleep(.01)
                         continue
 
