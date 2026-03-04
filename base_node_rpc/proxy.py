@@ -26,6 +26,26 @@ __version__ = get_versions()['version']
 del get_versions
 
 
+class _SciFloatSeries(pd.Series):
+    """pd.Series subclass that displays small/large floats in scientific notation."""
+
+    def __repr__(self):
+        if len(self) == 0:
+            return super().__repr__()
+        max_key_len = max(len(str(k)) for k in self.index)
+        lines = []
+        for k, v in self.items():
+            if isinstance(v, float):
+                if v != 0 and (abs(v) < 1e-3 or abs(v) >= 1e6):
+                    lines.append(f'{str(k):<{max_key_len}}  {v:.2e}')
+                else:
+                    lines.append(f'{str(k):<{max_key_len}}  {v:.2f}')
+            else:
+                lines.append(f'{str(k):<{max_key_len}}  {v}')
+        lines.append(f'dtype: {self.dtype}')
+        return '\n'.join(lines)
+
+
 class DeviceNotFound(Exception):
     """Raised when a device cannot be found."""
     pass
@@ -713,12 +733,12 @@ class ConfigMixinBase:
         try:
             fv = resolve_field_values(self._config_pb,
                                       set_default=True).set_index(['full_name'])
-            return pd.Series(
+            return _SciFloatSeries(
                 {k: PYTYPE_MAP[v.field_desc.type](v.value)
                  for k, v in fv.iterrows()},
                 dtype=object)
         except ValueError:
-            return pd.Series()
+            return _SciFloatSeries(dtype=object)
 
     @config.setter
     def config(self, value: pd.Series) -> None:
@@ -811,12 +831,12 @@ class StateMixinBase:
         try:
             fv = (resolve_field_values(self._state_pb,
                                      set_default=True).set_index(['full_name']))
-            return pd.Series(
+            return _SciFloatSeries(
                 {k: PYTYPE_MAP[v.field_desc.type](v.value)
                  for k, v in fv.iterrows()},
                 dtype=object)
         except ValueError:
-            return pd.Series()
+            return _SciFloatSeries(dtype=object)
 
     @state.setter
     def state(self, value: pd.Series) -> None:
