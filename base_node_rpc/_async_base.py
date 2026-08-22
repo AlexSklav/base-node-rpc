@@ -2,6 +2,7 @@
 import serial
 import blinker
 import asyncio
+import logging
 import threading
 import asyncserial
 import json_tricks
@@ -17,6 +18,8 @@ from logging_helpers import _L
 from nadamq.NadaMq import (cPacket, cPacketParser, PACKET_TYPES,
                           PACKET_NAME_BY_TYPE)
 
+from .queue import _header_only_packet
+
 __all__ = ['read_packet', '_read_device_id', '_available_devices',
            '_async_serial_keepalive', 'AsyncSerialMonitor',
            'BaseNodeSerialMonitor']
@@ -27,6 +30,27 @@ ID_REQUEST = cPacket(type_=PACKET_TYPES.ID_REQUEST).tobytes()
 class ParseError(Exception):
     """Raised when there is an error parsing a packet."""
     pass
+
+
+#: Attribute used to stash bytes that were read from a serial device but not
+#: consumed by :func:`read_packet` (i.e., the remainder of a chunk that
+#: contained more than one packet).
+_PENDING_ATTR = '_nadamq_pending_bytes'
+
+
+def _pending_bytes(serial_) -> bytes:
+    """Bytes read from :data:`serial_` but not yet consumed by a packet."""
+    return getattr(serial_, _PENDING_ATTR, b'') or b''
+
+
+def _set_pending_bytes(serial_, data: bytes) -> None:
+    """Stash unconsumed bytes on :data:`serial_` for the next read."""
+    try:
+        setattr(serial_, _PENDING_ATTR, data)
+    except (AttributeError, TypeError):
+        # Serial object does not accept arbitrary attributes; fall back to the
+        # previous behaviour of discarding trailing bytes.
+        pass
 
 
 async def read_packet(serial_: serial.Serial) -> Optional[cPacket]:
@@ -50,35 +74,55 @@ async def read_packet(serial_: serial.Serial) -> Optional[cPacket]:
         If a serial exception occurs, e.g., there was no response before timing out, return ``None``.
     .. versionchanged:: 0.52
         Improved error handling for better resilience.
+    .. versionchanged:: 0.55
+        Feed the parser one byte at a time and retain any bytes trailing the
+        completed packet for the next call, rather than passing the whole read
+        chunk to a single ``parse()`` call (which discarded everything after
+        the first completed packet).
     """
     parser = cPacketParser()
-    result = False
-    
+    # Start with any bytes left over from a previous call, i.e., the remainder
+    # of a read chunk that contained more than one packet.
+    pending = _pending_bytes(serial_)
+    _set_pending_bytes(serial_, b'')
+
     try:
-        while result is False:
-            try:
-                character = await serial_.read(8 << 10)
-                if not character:  # No data received
+        while True:
+            if not pending:
+                try:
+                    character = await serial_.read(8 << 10)
+                    if not character:  # No data received
+                        return None
+                except (serial.SerialException, OSError, AttributeError) as e:
+                    port = getattr(serial_, 'port', '??')
+                    if 'handle is invalid' not in str(e):
+                        _L().debug(f'Error communicating with port `{port}`: {e}')
                     return None
-            except (serial.SerialException, OSError, AttributeError) as e:
-                port = getattr(serial_, 'port', '??')
-                if 'handle is invalid' not in str(e):
-                    _L().debug(f'Error communicating with port `{port}`: {e}')
-                return None
-            except Exception as e:
-                _L().warning(f'Unexpected error reading from serial port: {e}')
-                return None
-                
-            result = parser.parse(np.frombuffer(character, dtype='uint8').copy())
-            if parser.error:
-                parser.reset()
-                _L().debug('Error parsing packet, resetting parser')
-                result = False
+                except Exception as e:
+                    _L().warning(f'Unexpected error reading from serial port: {e}')
+                    return None
+                pending = bytes(character)
+
+            # Feed the parser one byte at a time.  N.B. the whole chunk **must
+            # not** be passed to a single `parse()` call: that call returns as
+            # soon as a packet completes, discarding the rest of the chunk --
+            # so, e.g., a ``STREAM`` event arriving in the same read as the
+            # ``ID_RESPONSE`` being waited for would destroy the
+            # ``ID_RESPONSE``.
+            for i in range(len(pending)):
+                result = parser.parse(pending[i:i + 1])
+                if result is not False:
+                    # Retain the trailing bytes of the chunk so the packet(s)
+                    # behind this one are not lost with the parser state.
+                    _set_pending_bytes(serial_, pending[i + 1:])
+                    return result
+                if parser.error:
+                    _L().debug('Error parsing packet, resetting parser')
+                    parser.reset()
+            pending = b''
     except Exception:
         _L().error('Fatal error in read_packet', exc_info=True)
         return None
-        
-    return result
 
 
 async def _read_device_id(**kwargs) -> Dict[str, Any]:
@@ -129,7 +173,12 @@ async def _read_device_id(**kwargs) -> Dict[str, Any]:
         await async_device.write(ID_REQUEST)
         
         while True:
-            if not async_device.in_waiting:
+            # N.B. also consider bytes that were already read from the device
+            # but not consumed by the previous `read_packet()` call (i.e., the
+            # remainder of a chunk that carried more than one packet);
+            # `in_waiting` is 0 in that case even though a complete
+            # ``ID_RESPONSE`` may still be waiting to be parsed.
+            if not async_device.in_waiting and not _pending_bytes(async_device):
                 # Add small delay to ensure bytes show up
                 await asyncio.sleep(0.01)
                 continue
@@ -158,7 +207,7 @@ async def _read_device_id(**kwargs) -> Dict[str, Any]:
 async def _available_devices(
     ports: Optional[pd.DataFrame] = None,
     baudrate: Optional[int] = 9600,
-    timeout: Optional[float] = None,
+    timeout: Optional[float] = 5.,
     settling_time_s: Optional[float] = 0.,
     **kwargs
 ) -> pd.DataFrame:
@@ -183,6 +232,12 @@ async def _available_devices(
     timeout : float, optional
         Maximum number of seconds to wait for a response from each serial
         device.
+
+        **Default: 5 seconds**
+
+        .. note::
+            A device that never responds (e.g., a modem) would otherwise block
+            **forever** while holding the corresponding serial port open.
     settling_time_s : float, optional
         Time to wait before writing device ID request to serial port.
 
@@ -264,20 +319,37 @@ async def _async_serial_keepalive(
     parent.connected_event.clear()
     warned = False
     try:
-        while not parent.stop_event.wait(.01):
+        # NOTE: `parent.stop_event` is a **blocking** `threading.Event`, so it
+        # must not be waited on from within this coroutine.  Yield to the event
+        # loop using `asyncio.sleep()` at the end of each iteration instead
+        # (see below), otherwise this coroutine would starve the rest of the
+        # event loop (e.g., packet reading, pending requests) whenever no
+        # serial device is available to connect to.
+        while not parent.stop_event.is_set():
             try:
                 async with asyncserial.AsyncSerial(*args, warned=warned, **kwargs) as async_device:
                     _L().info(f'Connected to {async_device.port}')
 
                     parent.disconnected_event.clear()
-                    parent.connected_event.set()
+                    # Assign the device *before* setting the connected event,
+                    # since setting the event notifies waiting threads and
+                    # sends the `connected` signal (including a reference to
+                    # `parent.device`).
                     parent.device = async_device
+                    parent.connected_event.set()
                     port = async_device.port
-                    
+
                     # Monitor connection while stop_event is not set
                     while async_device.is_open and not parent.stop_event.is_set():
                         try:
-                            assert async_device.in_waiting >= 0
+                            # N.B. reading `in_waiting` *is* the disconnect
+                            # detector: it raises `SerialException`/`OSError`
+                            # once the device has been unplugged.  It must not
+                            # be written as an `assert`, since assertions are
+                            # stripped under `python -O`, which would silently
+                            # disable disconnect detection (and hence
+                            # reconnection) entirely.
+                            _ = async_device.in_waiting
                         except (serial.SerialException, OSError):
                             _L().debug(f'Serial connection lost for {port}')
                             break
@@ -301,7 +373,13 @@ async def _async_serial_keepalive(
             # If stop requested, break immediately
             if parent.stop_event.is_set():
                 break
-                
+
+            # Yield control back to the event loop before retrying.  This
+            # **must** happen on every path through the loop -- in particular
+            # when opening the serial port raised (synchronously) because no
+            # device is connected, in which case nothing else above awaits.
+            await asyncio.sleep(.01)
+
     finally:
         # Ensure events are in correct state when exiting
         parent.connected_event.clear()
@@ -367,19 +445,31 @@ class AsyncSerialMonitor(threading.Thread):
 
         self.serial_signals = blinker.Namespace()
 
-        def wrapper(f, signal_name):
+        # NOTE: only send a signal when the corresponding event is not
+        # *already* set, i.e., on an actual connected/disconnected
+        # **transition**.  Otherwise, e.g., a `disconnected` signal would be
+        # sent on every iteration of the reconnect loop in
+        # `_async_serial_keepalive()` (~100 times per second) while no serial
+        # device is available.
+        def wrapper(event, f, signal_name):
+            transition = not event.is_set()
             f()
-            self.serial_signals.signal(signal_name).send(
-                {'event': signal_name})
+            if transition:
+                self.serial_signals.signal(signal_name).send(
+                    {'event': signal_name})
 
-        def connected_wrapper(f):
+        def connected_wrapper(event, f):
+            transition = not event.is_set()
             f()
-            self.serial_signals.signal('connected').send(
-                {'event': 'connected', 'device': self.device})
+            if transition:
+                self.serial_signals.signal('connected').send(
+                    {'event': 'connected', 'device': self.device})
 
         self.connected_event.set = ft.partial(connected_wrapper,
+                                              self.connected_event,
                                               self.connected_event.set)
         self.disconnected_event.set = ft.partial(wrapper,
+                                                 self.disconnected_event,
                                                  self.disconnected_event.set,
                                                  'disconnected')
 
@@ -398,12 +488,23 @@ class AsyncSerialMonitor(threading.Thread):
         """Stop the serial monitor and wait for cleanup."""
         _L().debug('Stopping serial monitor...')
         self.stop_event.set()
-        
-        # Try to close device gracefully
+
+        # Try to close device gracefully.  The device is bound to the monitor
+        # event loop (closing it cancels pending reads), so schedule the close
+        # **on that loop** rather than performing it from the calling thread.
+        device = self.device
         try:
-            if self.device is not None:
-                self.device.close()
-                _L().debug('Device closed')
+            if device is not None:
+                if (self.loop is not None and not self.loop.is_closed() and
+                        self.loop.is_running()):
+                    self.loop.call_soon_threadsafe(device.close)
+                    _L().debug('Device close scheduled')
+                else:
+                    # N.B. a callback scheduled with
+                    # `call_soon_threadsafe()` is *never* executed while the
+                    # loop is not running, so close directly instead.
+                    device.close()
+                    _L().debug('Device closed')
         except Exception as e:
             _L().debug(f'Error closing device: {e}')
 
@@ -414,9 +515,19 @@ class AsyncSerialMonitor(threading.Thread):
             # Force cleanup if timeout occurs
             if self.loop is not None and not self.loop.is_closed():
                 try:
-                    # Cancel all tasks in the loop
-                    for task in asyncio.all_tasks(self.loop):
-                        task.cancel()
+                    # Cancel all tasks in the loop.  Task cancellation is not
+                    # thread-safe, so it must be performed *on* the loop while
+                    # the loop is running.
+                    def _cancel_all_tasks():
+                        for task in asyncio.all_tasks(self.loop):
+                            task.cancel()
+
+                    if self.loop.is_running():
+                        self.loop.call_soon_threadsafe(_cancel_all_tasks)
+                    else:
+                        # A callback scheduled on a loop that is not running
+                        # would never execute, so cancel directly.
+                        _cancel_all_tasks()
                     _L().debug('Cancelled all tasks')
                 except Exception as e:
                     _L().debug(f'Error during cleanup: {e}')
@@ -436,17 +547,28 @@ class BaseNodeSerialMonitor(AsyncSerialMonitor):
     def __init__(self, *args: Any, **kwargs: Any) -> None:
         super().__init__(*args, **kwargs)
         self._request_queue = None
+        self._request_lock = None
         self.signals = blinker.Namespace()
 
     def listen(self) -> None:
         """Start listening for serial data and process packets."""
         _L().info('Starting BaseNodeSerialMonitor listener')
-        
-        # Create new event loop for this thread
-        self.loop = asyncio.new_event_loop()
+
+        # Reuse the event loop created by :meth:`run` (rather than leaking it
+        # by replacing it with a new one, which would also leave a window
+        # during which `run_coroutine_threadsafe()` could target a loop that is
+        # never run).  A new loop is only created if there is no usable loop,
+        # e.g., if :meth:`listen` is called directly, or called again after a
+        # previous loop was closed below.
+        if self.loop is None or self.loop.is_closed():
+            self.loop = asyncio.new_event_loop()
         asyncio.set_event_loop(self.loop)
 
         self._request_queue = asyncio.Queue()
+        # Create the lock here (i.e., in the thread running the fresh event
+        # loop) so that it is bound to the current event loop across
+        # reconnects.
+        self._request_lock = asyncio.Lock()
         tasks = []
         
         try:
@@ -553,8 +675,37 @@ class BaseNodeSerialMonitor(AsyncSerialMonitor):
         cPacket
             Response packet.
         """
-        await self.device.write(request)
-        return await self._request_queue.get()
+        # Serialize requests so that each request/response pair is matched up
+        # one-to-one.  Using `async with` guarantees the lock is released even
+        # if this coroutine is cancelled while waiting for a response (which is
+        # exactly what the timeout/retry logic in :meth:`request` does).
+        async with self._request_lock:
+            # Discard any responses that are already queued before sending a
+            # new request.  Anything sitting in the queue at this point is a
+            # response nobody is waiting for -- typically the duplicate
+            # response produced when :meth:`request` timed out and re-sent a
+            # command that the device was still busy executing.  Draining
+            # prevents the queue from becoming desynchronized by one packet,
+            # which would otherwise cause each subsequent command to receive
+            # the *previous* command's response.
+            #
+            # NOTE: this does not close the race completely.  A stale response
+            # that arrives *between* the drain below and the real response can
+            # still be mis-delivered (the duplicate command may still be
+            # executing on the device).  Callers should therefore use timeouts
+            # longer than the device's worst-case blocking time.
+            while True:
+                try:
+                    stale_packet = self._request_queue.get_nowait()
+                except asyncio.QueueEmpty:
+                    break
+                _L().warning('Discarding stale response packet '
+                             f'(type={PACKET_NAME_BY_TYPE[stale_packet.type_]},'
+                             f' {len(stale_packet.data())} bytes) left over '
+                             'from a timed-out request')
+
+            await self.device.write(request)
+            return await self._request_queue.get()
 
     async def read_packets(self) -> None:
         """Read and process packets from the serial device."""
@@ -562,8 +713,11 @@ class BaseNodeSerialMonitor(AsyncSerialMonitor):
         L.debug('start listening for packets')
 
         async def on_packet_received(packet_: cPacket) -> None:
-            L.debug(f'packet received: {PACKET_NAME_BY_TYPE[packet_.type_]}')
-            L.debug(f'parsed packet: `{np.frombuffer(packet_.data(), dtype="uint8")}`')
+            # N.B. guarded: these are evaluated for *every* received packet,
+            # and the `numpy` conversion below is far from free.
+            if L.isEnabledFor(logging.DEBUG):
+                L.debug(f'packet received: {PACKET_NAME_BY_TYPE[packet_.type_]}')
+                L.debug(f'parsed packet: `{np.frombuffer(packet_.data(), dtype="uint8")}`')
 
             if packet_.type_ == PACKET_TYPES.STREAM:
                 try:
@@ -572,13 +726,28 @@ class BaseNodeSerialMonitor(AsyncSerialMonitor):
                     #
                     # [1]: http://json-tricks.readthedocs.io/en/latest/#numpy-arrays
                     message = json_tricks.loads(packet_.data().decode('utf8'))
-                    self.signals.signal(message['event']).send(message)
+                    event = message['event']
+                except Exception:
+                    event = None
+                    # N.B. log the *raw* payload bytes.  Re-running
+                    # `.decode('utf8')` here would raise straight back out of
+                    # this handler whenever the decode is what failed in the
+                    # first place, abandoning the rest of the read chunk.
+                    L.debug("Stream packet contents do not describe an event: "
+                            f"{packet_.data()}", exc_info=True)
+                if event is not None:
+                    # Dispatch the signal *outside* of the `try` above so that
+                    # an exception raised by a subscriber is neither swallowed
+                    # nor misreported as a malformed event packet.
+                    #
                     # Do not add event packets to a queue.  This prevents the
                     # `stream` queue from filling up with rapidly occurring
                     # events.
-                except Exception:
-                    L.debug("Stream packet contents do not describe an event: "
-                            f"{packet_.data().decode('utf8')}", exc_info=True)
+                    try:
+                        self.signals.signal(event).send(message)
+                    except Exception:
+                        L.warning(f'Error handling `{event}` event signal',
+                                  exc_info=True)
             elif packet_.type_ == PACKET_TYPES.DATA:
                 await self._request_queue.put(packet_)
 
@@ -603,6 +772,19 @@ class BaseNodeSerialMonitor(AsyncSerialMonitor):
                         # Device connected but closed — hot-unplug.
                         if (self.device is not None and
                                 not getattr(self.device, 'is_open', False)):
+                            # Device was connected but is now closed (e.g.,
+                            # hot-unplug latched by `asyncserial`).
+                            #
+                            # N.B. yield to the event loop *before* breaking
+                            # out to the outer loop.  Breaking straight out
+                            # re-enters the outer `while` -- which calls
+                            # `read()` again immediately -- with **no** `await`
+                            # anywhere along the path, since `read()` raises
+                            # synchronously on a dead device.  That starves the
+                            # event loop, so the keepalive task never gets to
+                            # run and the device is never torn down or
+                            # reconnected.
+                            await asyncio.sleep(.01)
                             break
                         await asyncio.sleep(.01)
                         continue
@@ -610,18 +792,34 @@ class BaseNodeSerialMonitor(AsyncSerialMonitor):
                     if not data:
                         continue
 
-                    L.debug(f'read: `{data}`')
-                    buffer_ = np.frombuffer(data, dtype='uint8').copy()
-                    for i in range(len(buffer_)):
-                        result = parser.parse(buffer_[i:i + 1])
+                    # N.B. guarded: `data` can be up to 8 KiB, and formatting
+                    # its `repr` for every read is not free.
+                    if L.isEnabledFor(logging.DEBUG):
+                        L.debug(f'read: `{data}`')
+                    # Feed the parser one byte at a time.  N.B. the whole
+                    # chunk **must not** be passed in a single `parse()` call:
+                    # that call returns as soon as a packet completes,
+                    # discarding the rest of the chunk.  1-byte `bytes` slices
+                    # are used rather than `numpy` slices (which allocated an
+                    # array per byte), and the packet returned by `parse()` is
+                    # dispatched directly rather than being serialized and
+                    # parsed a second time (which re-ran the CRC over every
+                    # payload and allocated a second parser per packet).
+                    parse = parser.parse
+                    for i in range(len(data)):
+                        result = parse(data[i:i + 1])
                         if result is not False:
-                            packet_str = np.frombuffer(result.tobytes(),
-                                                       dtype='uint8').copy()
-                            packet = cPacketParser().parse(packet_str)
-                            await on_packet_received(packet)
+                            await on_packet_received(result)
                             parser.reset()
                         elif parser.error:
                             parser.reset()
+                        else:
+                            # Header-only packets (i.e., ``ACK``/``NACK``) are
+                            # not completed by the parser when fed one byte at
+                            # a time.
+                            header_only_packet = _header_only_packet(parser)
+                            if header_only_packet is not None:
+                                await on_packet_received(header_only_packet)
             except Exception:
                 if self.stop_event.is_set():
                     L.debug('Stop event set during exception, exiting')

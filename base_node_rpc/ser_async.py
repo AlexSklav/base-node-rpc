@@ -146,7 +146,7 @@ def with_loop(func: Callable) -> Callable:
 def available_devices(
     baudrate: Optional[int] = 9600,
     ports: Optional[pd.DataFrame] = None,
-    timeout: Optional[float] = None,
+    timeout: Optional[float] = 5.,
     **kwargs
 ) -> Coroutine:
     """
@@ -162,6 +162,8 @@ def available_devices(
         Default: all available ports
     timeout : float, optional
         Maximum seconds to wait for response from each serial device.
+        Default: 5 seconds.  A device that never responds would otherwise
+        block forever while holding the corresponding serial port open.
     **kwargs
         Keyword arguments to pass to `_available_devices()` function.
 
@@ -184,7 +186,9 @@ def read_device_id(**kwargs) -> Coroutine:
     ----------
     timeout : float, optional
         Number of seconds to wait for response from a serial device.
-        If not specified, will wait indefinitely.
+        Default: 5 seconds.  Pass ``timeout=None`` to wait indefinitely (note
+        that a device that never responds would then block forever while
+        holding the serial port open).
     **kwargs
         Keyword arguments to pass to :class:`asyncserial.AsyncSerial`
         initialization function.
@@ -199,7 +203,7 @@ def read_device_id(**kwargs) -> Coroutine:
     asyncio.TimeoutError
         If timeout is specified and device doesn't respond in time.
     """
-    timeout = kwargs.pop('timeout', None)
+    timeout = kwargs.pop('timeout', 5.)
     coro = _read_device_id(**kwargs)
     
     # Only use wait_for if timeout is specified
