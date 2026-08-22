@@ -1,4 +1,6 @@
 # coding: utf-8
+import logging
+
 from typing import Dict, List
 
 from path_helpers import path
@@ -8,7 +10,15 @@ from .ser_async import available_devices, read_device_id
 
 try:
     from .node import Proxy, I2cProxy, SerialProxy
-except (ImportError, TypeError):
+except (ImportError, TypeError) as e:
+    # `node` module is generated at build time; it is legitimately missing
+    # during a fresh conda build, so keep the warning to a single (still
+    # diagnosable) line and reserve the traceback for debug level.
+    _logger = logging.getLogger(__name__)
+    _logger.warning(
+        f'Could not import proxy classes from `{__name__}.node`: {e!r}')
+    _logger.debug(f'Could not import proxy classes from `{__name__}.node`',
+                  exc_info=True)
     Proxy = None
     I2cProxy = None
     SerialProxy = None

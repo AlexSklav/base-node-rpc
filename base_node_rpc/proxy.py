@@ -1,11 +1,12 @@
 # coding: utf-8
 import sys
 import queue
+import asyncio
 import blinker
 import warnings
 import threading
 
-from typing import Optional, Any, Type
+from typing import Dict, Optional, Any, Type
 
 import pandas as pd
 import serial.threaded
@@ -15,6 +16,7 @@ import importlib.metadata as metadata
 
 from or_event import OrEvent
 from logging_helpers import _L
+from packaging.version import Version
 from nadamq.NadaMq import cPacket, PACKET_TYPES
 from arduino_rpc.protobuf import resolve_field_values, PYTYPE_MAP
 from .queue import PacketQueueManager
@@ -54,7 +56,10 @@ class DeviceNotFound(Exception):
 class MultipleDevicesFound(Exception):
     """Raised when multiple devices are found and only one was expected."""
     def __init__(self, *args: Any, **kwargs: Any) -> None:
-        self.df_comports = kwargs.pop('df_comports', None)
+        # Accept the comports table either as the `df_comports` keyword or as
+        # the first positional argument (which also serves as the message).
+        self.df_comports = kwargs.pop('df_comports',
+                                      args[0] if args else None)
         super().__init__(*args, **kwargs)
 
 
@@ -66,8 +71,17 @@ class DeviceVersionMismatch(Exception):
         super().__init__()
 
     def __str__(self) -> str:
+        # N.B. not every proxy exposes a `device_version` attribute (e.g.,
+        # `dropbot.SerialProxy` does not), and `__str__()` must never raise --
+        # doing so breaks `str(exc)`, `f'{exc}'`, and traceback formatting.
+        driver_version = getattr(self.device, 'device_version', None)
+        if driver_version is None:
+            return (
+                f'Device driver version does not match version reported by '
+                f'device ({self.device_version}).'
+            )
         return (
-            f'Device driver version ({self.device.device_version}) '
+            f'Device driver version ({driver_version}) '
             f'does not match version reported by device '
             f'({self.device_version}).'
         )
@@ -145,9 +159,8 @@ class ProxyBase:
         return "unknown"
 
     @property
-    def remote_software_version(self) -> str:
-        """Get remote software version."""
-        from packaging.version import Version
+    def remote_software_version(self) -> Version:
+        """Get remote software version as a `packaging.version.Version`."""
         return Version(self.properties.software_version)
 
     @property
@@ -158,8 +171,10 @@ class ProxyBase:
     @stream.setter
     def stream(self, stream: Any) -> None:
         """Set stream."""
+        # N.B. no `reset()` hook exists on this class hierarchy; sub-classes
+        # that need to reset state on stream replacement should override this
+        # setter.
         self._stream = stream
-        self.reset()
 
     @property
     def high_water_mark(self) -> int:
@@ -194,32 +209,38 @@ class ProxyBase:
     def buffer_size(self) -> int:
         """Get buffer size."""
         if self._buffer_size is None:
+            # Temporarily disable bounds checking while querying the device for
+            # the maximum payload size.  Restore the *original* setting, even if
+            # an exception occurs.
+            original_bounds_check = self._buffer_bounds_check
             self._buffer_bounds_check = False
-            payload_size_set = False
             try:
-                max_i2c_payload_size = self.max_i2c_payload_size()
-                payload_size_set = True
-            except AttributeError:
-                max_i2c_payload_size = sys.maxsize
-            try:
-                max_serial_payload_size = self.max_serial_payload_size()
-                payload_size_set = True
-            except AttributeError:
-                max_serial_payload_size = sys.maxsize
-            if not payload_size_set:
-                raise IOError(
-                    'Could not determine maximum packet payload size. '
-                    'Make sure at least one of the following methods is '
-                    'defined: `max_i2c_payload_size` method or '
-                    '`max_serial_payload_size`.')
-            self._buffer_size = min(max_serial_payload_size,
-                                    max_i2c_payload_size)
-            self._buffer_bounds_check = True
+                payload_size_set = False
+                try:
+                    max_i2c_payload_size = self.max_i2c_payload_size()
+                    payload_size_set = True
+                except AttributeError:
+                    max_i2c_payload_size = sys.maxsize
+                try:
+                    max_serial_payload_size = self.max_serial_payload_size()
+                    payload_size_set = True
+                except AttributeError:
+                    max_serial_payload_size = sys.maxsize
+                if not payload_size_set:
+                    raise IOError(
+                        'Could not determine maximum packet payload size. '
+                        'Make sure at least one of the following methods is '
+                        'defined: `max_i2c_payload_size` method or '
+                        '`max_serial_payload_size`.')
+                self._buffer_size = min(max_serial_payload_size,
+                                        max_i2c_payload_size)
+            finally:
+                self._buffer_bounds_check = original_bounds_check
         return self._buffer_size
 
     @property
-    def queues(self) -> pd.Series:
-        """Get packet queues."""
+    def queues(self) -> Dict[str, queue.Queue]:
+        """Get packet queues, keyed by packet type name."""
         return self._packet_queue_manager.packet_queues
 
     def _send_command(self,
@@ -232,14 +253,18 @@ class ProxyBase:
 
 class I2cProxyMixin:
     """Mixin for I2C proxy functionality."""
-    def __init__(self, i2c_address: str, proxy: 'Proxy') -> None:
+    def __init__(self, i2c_address: str, proxy: 'Proxy', **kwargs: Any) -> None:
         self.proxy = proxy
         self.address = i2c_address
+        # Chain to the rest of the MRO (e.g., `ProxyBase`) so that
+        # `_packet_queue_manager`, `_timeout_s`, etc. are initialized.
+        super().__init__(**kwargs)
 
     def _send_command(self, packet: cPacket) -> cPacket:
         """Send command via I2C."""
+        # N.B. `packet.data()` returns `bytes`, which already iterates as ints.
         response = self.proxy.i2c_request(
-            self.address, list(map(ord, packet.data())))
+            self.address, list(packet.data()))
         return cPacket(data=response.tobytes(), type_=PACKET_TYPES.DATA)
 
     def __del__(self) -> None:
@@ -469,6 +494,9 @@ class SerialProxyMixin:
         """
         if port is None and self.port:
             port = self.port
+        # Whether a specific port (or list of ports) was requested, as opposed
+        # to auto-scanning *all* available comports.
+        explicit_port = port is not None
         if settling_time_s is None:
             try:
                 settling_time_s = self._settling_time_s
@@ -559,18 +587,42 @@ class SerialProxyMixin:
                     f"device available on port {port_i}"
                 )
 
+        driver_version = getattr(self, 'device_version', None)
+
         for port_i in ports:
             try:
                 # Timeout should be settling_time + reasonable buffer for device response
                 # Default to at least 5 seconds total to allow for slow devices
                 device_timeout = max(settling_time_s * 2 + 1.0, 5.0)
 
-                device_id = read_device_id(
-                    port=port_i,
-                    timeout=device_timeout,
-                    settling_time_s=settling_time_s,
-                    baudrate=baudrate
-                )
+                try:
+                    device_id = read_device_id(
+                        port=port_i,
+                        timeout=device_timeout,
+                        settling_time_s=settling_time_s,
+                        baudrate=baudrate
+                    )
+                except (asyncio.TimeoutError, RuntimeError) as e:
+                    # Device did not respond with an ``ID_RESPONSE`` packet.
+                    if not explicit_port:
+                        # Auto-scan over *all* comports.  A port that does not
+                        # identify itself is almost certainly not a device of
+                        # interest (e.g., a modem or Bluetooth port), so skip
+                        # it rather than paying for several RPC calls (each up
+                        # to `_timeout_s`) to find that out.
+                        _L().debug(
+                            f'No `ID_RESPONSE` from port {port_i} ({e}); '
+                            f'skip port while scanning.'
+                        )
+                        continue
+                    # A specific port was requested, so fall back to
+                    # identifying the device using the ``properties`` reported
+                    # over the RPC connection below.
+                    _L().debug(
+                        f'No `ID_RESPONSE` from port {port_i} ({e}); '
+                        f'fall back to `properties` based identification.'
+                    )
+                    device_id = None
 
                 if device_id is not None and device_name is not None:
                     if device_id.get('device_name') != device_name:
@@ -579,10 +631,10 @@ class SerialProxyMixin:
                             f"expected name `{device_name}`"
                         )
                     elif not (device_id.get('device_version') ==
-                            getattr(self, 'device_version', None)):
+                            driver_version):
                         if DeviceVersionMismatch in ignore:
                             _L().warning(
-                                f"Device driver version ({self.device_version}) "
+                                f"Device driver version ({driver_version}) "
                                 f"does not match version reported by device "
                                 f"({device_id.get('device_version')})."
                             )
@@ -595,30 +647,58 @@ class SerialProxyMixin:
                     f'Attempt to connect to device on port {port_i} '
                     f'(baudrate={baudrate})'
                 )
+                # Close any serial thread left over from a previous connection
+                # attempt (or from a previous `_connect()` call) so that it does
+                # not hold the port open and keep reconnecting in the
+                # background.
+                self._close_serial_thread()
                 # Launch background thread to:
                 #
                 #  - Connect to serial port
                 #  - Listen for incoming data and parse into packets.
                 #  - Attempt to reconnect if disconnected.
+                # N.B. assign *before* entering, so that a failed
+                # `__enter__()` (which has already started the thread) is still
+                # cleaned up below.
                 self.serial_thread = sd.threaded.KeepAliveReader(
                     PacketProtocol, port_i,
                     baudrate=baudrate
-                ).__enter__()
-                event = OrEvent(
-                    self.serial_thread.closed,
-                    self.serial_thread.connected
                 )
-                _L().debug(f'Wait for connection to port {port_i}')
-                event.wait(timeout=2.0)  # Short timeout for connection
-
-                if self.serial_thread.error.is_set():
-                    raise self.serial_thread.error.exception
+                # Bound the connection wait in `KeepAliveReader.__enter__()`,
+                # which otherwise blocks *indefinitely* if the protocol never
+                # signals.  N.B. `default_timeout_s` must be assigned rather
+                # than passed to the constructor, since `KeepAliveReader`
+                # forwards its keyword arguments verbatim to
+                # `serial.serial_for_url()`.
+                self.serial_thread.default_timeout_s = device_timeout
 
                 try:
+                    self.serial_thread.__enter__()
+                    event = OrEvent(
+                        self.serial_thread.closed,
+                        self.serial_thread.connected
+                    )
+                    _L().debug(f'Wait for connection to port {port_i}')
+                    event.wait(timeout=2.0)  # Short timeout for connection
+
+                    if self.serial_thread.error.is_set():
+                        raise self.serial_thread.error.exception
+
                     self.ram_free()
                     if device_id is None:
                         properties = self.properties
-                        device_id = {'device_name': properties['package_name']}
+                        package_name = properties['package_name']
+                        if (device_name is not None and
+                                package_name != device_name):
+                            raise DeviceNotFound(
+                                f"Device `{package_name}` does not match "
+                                f"expected name `{device_name}`"
+                            )
+                        # N.B. the device *version* cannot be verified along
+                        # this path, since it is only reported in an
+                        # ``ID_RESPONSE`` packet (which this device did not
+                        # send).
+                        device_id = {'device_name': package_name}
 
                     _L().info(
                         f"Successfully connected to {device_id['device_name']} "
@@ -626,23 +706,31 @@ class SerialProxyMixin:
                     )
                     self.device_verified.set()
                     return
-                except IOError:
-                    _L().debug(f'Connection unsuccessful on port {port_i}')
-                    continue
                 except Exception as e:
+                    # Verification failed; tear down the background thread
+                    # before moving on to the next port.
+                    self._close_serial_thread()
                     _L().warning(f"Failed to connect to port {port_i}: {e}")
                     continue
+            except DeviceVersionMismatch:
+                # Correct device found, but running an unexpected firmware
+                # version.  Propagate so callers can, e.g., offer to update the
+                # firmware.
+                raise
+            except DeviceNotFound as e:
+                _L().debug(f"No matching device on port {port_i}: {e}")
+                continue
             except Exception as e:
                 _L().warning(f"Failed to connect to port {port_i}: {e}")
                 continue
 
         raise IOError('Device not found on any port.')
 
-    def terminate(self) -> None:
+    def _close_serial_thread(self) -> None:
         """
-        Terminate the serial connection gracefully.
+        Close the current serial thread (if any) and clear the reference.
 
-        Closes the serial thread and cleans up resources.
+        **N.B.,** caller is responsible for any required locking.
         """
         if self.serial_thread is not None:
             try:
@@ -653,6 +741,28 @@ class SerialProxyMixin:
                 _L().error(f'Error terminating serial thread: {e}')
             finally:
                 self.serial_thread = None
+
+    def terminate(self) -> None:
+        """
+        Terminate the serial connection gracefully.
+
+        Closes the serial thread and cleans up resources.
+        """
+        # Try to hold the command lock so that an in-flight `_send_command()`
+        # in another thread does not see `self.serial_thread` set to `None`.
+        #
+        # N.B. `_command_lock` is *not* reentrant and `_close_serial_thread()`
+        # waits (without a timeout) for the reader thread to close, so blocking
+        # here indefinitely would deadlock permanently if, e.g., a
+        # ``disconnected`` signal subscriber issues an RPC request.  Tear down
+        # regardless once the (bounded) acquire attempt fails; the resulting
+        # `AttributeError` race in `_send_command()` is the lesser evil.
+        locked = self._command_lock.acquire(timeout=2.)
+        try:
+            self._close_serial_thread()
+        finally:
+            if locked:
+                self._command_lock.release()
 
     def _send_command(self,
                      packet: cPacket,
