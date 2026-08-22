@@ -37,7 +37,14 @@ def parse_intel_hex(data: str) -> pd.DataFrame:
     matches = []
 
     for i, line_i in enumerate(data.splitlines()):
-        match_i = cre_hex_record.match(line_i).groupdict()
+        if not line_i.strip():
+            # Skip blank/whitespace-only lines (e.g., trailing newline).
+            continue
+
+        match_i = cre_hex_record.match(line_i)
+        if match_i is None:
+            raise ValueError(f'Line {i + 1} is not a valid Intel HEX record: "{line_i}".')
+        match_i = match_i.groupdict()
 
         checksum_i = ((sum(hex2ints(line_i[1:-2])) ^ 0xFF) + 1 & 0xFF)
         if not checksum_i == int(match_i['checksum'], 16):
@@ -50,8 +57,10 @@ def parse_intel_hex(data: str) -> pd.DataFrame:
         matches.append(match_i)
 
     df_data = pd.DataFrame(matches)
-    df_data.loc[:, ['record_type', 'address', 'byte_count', 'checksum']] = \
-        df_data[['record_type', 'address', 'byte_count', 'checksum']].map(lambda x: int(x, 16))
+    # Assign whole columns (not `.loc[...] = ...`): pandas 3 infers these
+    # columns as `str` dtype and refuses an in-place int write-back.
+    int_columns = ['record_type', 'address', 'byte_count', 'checksum']
+    df_data[int_columns] = df_data[int_columns].map(lambda x: int(x, 16))
 
     # XXX We don't currently support [record types 2-5][1].
     # XXX We only currently support **contiguous** data sections.
@@ -59,13 +68,19 @@ def parse_intel_hex(data: str) -> pd.DataFrame:
     # [1]: https://en.wikipedia.org/wiki/Intel_HEX#Record_types
 
     # Verify all records are only of type 0 or 1.
-    assert df_data.record_type.isin([0, 1]).all(), 'Records appear to be outside of the supported types [0 or 1]'
+    if not df_data.record_type.isin([0, 1]).all():
+        unsupported = sorted(set(df_data.loc[~df_data.record_type.isin([0, 1]), 'record_type']))
+        raise ValueError('Records appear to be outside of the supported types [0 or 1]: '
+                         f'{unsupported}')
 
     # Verify there is exactly one 1 type record.
-    assert df_data.loc[df_data.record_type == 1].shape[0] == 1, 'More than one type 1 records found'
+    n_eof = df_data.loc[df_data.record_type == 1].shape[0]
+    if n_eof != 1:
+        raise ValueError(f'Expected exactly one type 1 (end-of-file) record, found {n_eof}.')
 
     # Verify data is contiguous.
-    assert (df_data.loc[df_data.record_type == 0, 'address'].diff()[1:].values
-            == df_data.loc[df_data.record_type == 0, 'byte_count'].iloc[:-1]).all(), 'Data is not contiguous'
+    if not (df_data.loc[df_data.record_type == 0, 'address'].diff()[1:].values
+            == df_data.loc[df_data.record_type == 0, 'byte_count'].iloc[:-1]).all():
+        raise ValueError('Data is not contiguous')
 
     return df_data

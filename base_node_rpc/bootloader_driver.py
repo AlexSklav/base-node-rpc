@@ -16,7 +16,7 @@ from .intel_hex import parse_intel_hex
 from .proxy import ProxyBase
 
 
-def _data_as_list(data: Union[List, np.array]) -> List[bytes]:
+def _data_as_list(data: Union[List, np.array]) -> List[int]:
     """
     Parameters
     ----------
@@ -29,10 +29,11 @@ def _data_as_list(data: Union[List, np.array]) -> List[bytes]:
         List of integer byte values.
     """
     if isinstance(data, np.ndarray):
-        data = data.tobytes()
+        return list(data.tobytes())
     if isinstance(data, str):
-        data = [ord(char) for char in data]
-    return data
+        return [ord(char) for char in data]
+    # `bytes`/`bytearray`/`list`/`tuple` all iterate as integer byte values.
+    return list(data)
 
 
 class TwiBootloader:
@@ -65,7 +66,9 @@ class TwiBootloader:
         Read ``twiboot`` version string.
         """
         self.proxy.i2c_write(self.bootloader_address, 0x01)
-        return self.proxy.i2c_read(self.bootloader_address, 16).tobytes()
+        # `twiboot` pads the 16-byte version string with NUL bytes.
+        return (self.proxy.i2c_read(self.bootloader_address, 16).tobytes()
+                .decode('utf-8', errors='replace').rstrip('\x00'))
 
     def read_chip_info(self) -> Dict:
         """
@@ -76,11 +79,14 @@ class TwiBootloader:
         """
         self.proxy.i2c_write(self.bootloader_address, [0x02, 0x00, 0x00, 0x00])
         data = self.proxy.i2c_read(self.bootloader_address, 8)
+        # Cast to plain Python `int`s.  Otherwise, e.g., `page_size` is a
+        # `numpy.uint8`, which silently wraps at 256 when used in arithmetic
+        # (NEP 50), corrupting computed flash page addresses.
         return {
-            'signature': data[:3].tolist(),
-            'page_size': data[3],
-            'flash_size': struct.unpack('>H', data[4:6])[0],
-            'eeprom_size': struct.unpack('>H', data[6:8])[0]
+            'signature': [int(x) for x in data[:3]],
+            'page_size': int(data[3]),
+            'flash_size': int(struct.unpack('>H', data[4:6])[0]),
+            'eeprom_size': int(struct.unpack('>H', data[6:8])[0])
         }
 
     def read_flash(self, address: int, n_bytes: int) -> bytes:
@@ -204,9 +210,12 @@ class TwiBootloader:
         # At most, wait 100x the specified nominal delay during retries of
         # failed page writes.
         max_delay = max(1., 100. * delay_s)
+        # Clamp to a positive floor: `log(0)` is `-inf`, which turns the
+        # `logspace` schedule into NaNs (and `time.sleep(nan)` raises).
+        min_delay = max(delay_s, 1e-6)
         # Retry failed page writes up to 10 times, increasing the delay between
         # operations exponentially from one attempt to the next.
-        delay_durations = np.logspace(np.log(delay_s) / np.log(10), np.log(max_delay) / np.log(10),
+        delay_durations = np.logspace(np.log(min_delay) / np.log(10), np.log(max_delay) / np.log(10),
                                       num=10, base=10)
 
         for i, page_i in enumerate(pages):
@@ -224,13 +233,12 @@ class TwiBootloader:
                 verify_data_i = self.read_flash(i * chip_info['page_size'], chip_info['page_size'])
                 # Delay to allow bootloader to finish processing flash read.
                 time.sleep(delay_j)
-                try:
-                    if (verify_data_i == page_i).all():
-                        # Data page has been verified successfully.
-                        break
-                except AttributeError:
-                    # Data lengths do not match.
-                    pass
+                # Compare lengths explicitly.  A short read is a verification
+                # failure (and comparing mismatched lengths raises).
+                if len(verify_data_i) == len(page_i) and np.all(np.asarray(verify_data_i) ==
+                                                                np.asarray(page_i)):
+                    # Data page has been verified successfully.
+                    break
             else:
                 raise IOError('Page write failed to verify for **all** attempted delay durations.')
 
@@ -258,7 +266,17 @@ def load_pages(firmware_path: str, page_size: int) -> List:
     data = firmware_path.text()
 
     df_data = parse_intel_hex(data)
-    data_bytes = list(chain(*df_data.loc[df_data.record_type == 0, 'data']))
+    df_flash = df_data.loc[df_data.record_type == 0]
+
+    # Pages are written starting at flash address 0, so a non-zero base address
+    # would silently relocate the image.  Refuse rather than mis-flash.
+    if df_flash.shape[0]:
+        start_address = int(df_flash['address'].iloc[0])
+        if start_address != 0:
+            raise ValueError(f'Firmware image starts at address {start_address:#x}, '
+                             'expected 0x0 — refusing to flash')
+
+    data_bytes = list(chain(*df_flash['data']))
 
     pages = [data_bytes[i:i + page_size] for i in range(0, len(data_bytes), page_size)]
 
