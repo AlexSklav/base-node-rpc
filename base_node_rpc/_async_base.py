@@ -155,12 +155,12 @@ async def read_packet(serial_: serial.Serial) -> Optional[cPacket]:
         If a serial exception occurs, e.g., there was no response before timing out, return ``None``.
     .. versionchanged:: 0.52
         Improved error handling for better resilience.
-    .. versionchanged:: 0.55
+    .. versionchanged:: 0.52.11
         Feed the parser one byte at a time and retain any bytes trailing the
         completed packet for the next call, rather than passing the whole read
         chunk to a single ``parse()`` call (which discarded everything after
         the first completed packet).
-    .. versionchanged:: 0.55.1
+    .. versionchanged:: 0.52.12
         Feed the parser whole chunks and use
         :attr:`nadamq.NadaMq.cPacketParser.bytes_consumed` to determine the
         remainder to stash, rather than feeding (and slicing) one byte at a
@@ -688,7 +688,7 @@ class BaseNodeSerialMonitor(AsyncSerialMonitor):
         int
             Request identifier in the range ``1..65535``.
 
-        .. versionadded:: 0.55.1
+        .. versionadded:: 0.52.12
         """
         with self._iuid_lock:
             return next(self._iuid_counter) % _IUID_MAX + 1
@@ -711,7 +711,7 @@ class BaseNodeSerialMonitor(AsyncSerialMonitor):
             stamped (i.e. it is not a serialized packet), in which case
             :meth:`arequest` falls back to legacy FIFO response matching.
 
-        .. versionadded:: 0.55.1
+        .. versionadded:: 0.52.12
         """
         iuid = self._next_iuid()
         stamped = _stamp_iuid(request, iuid)
@@ -832,7 +832,7 @@ class BaseNodeSerialMonitor(AsyncSerialMonitor):
         was never awaited`` :class:`RuntimeWarning` during garbage collection,
         and raise a clear error instead.
 
-        .. versionchanged:: 0.55.1
+        .. versionchanged:: 0.52.12
             Stamp a fresh ``IUID`` into the request so that :meth:`arequest`
             can correlate the response with it.  N.B. this happens **per
             call**, so the retry issued by :meth:`request` after a timeout
@@ -879,7 +879,7 @@ class BaseNodeSerialMonitor(AsyncSerialMonitor):
 
         Version log
         -----------
-        .. versionchanged:: 0.55.1
+        .. versionchanged:: 0.52.12
             Correlate the response with the request by ``IUID`` where the
             firmware supports it.  A response whose ``IUID`` matches neither
             the request nor ``0`` is a *late* response to an earlier,

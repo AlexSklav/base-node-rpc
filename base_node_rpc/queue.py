@@ -78,7 +78,7 @@ def _install_json_tricks_hook_cache() -> bool:
     bool
         ``True`` if the cache is installed.
 
-    .. versionadded:: 0.55.1
+    .. versionadded:: 0.52.12
     """
     global _JSON_TRICKS_HOOK_CACHE_INSTALLED
 
@@ -237,14 +237,14 @@ class PacketQueueManager:
         Do not add event packets to a queue.  This prevents the ``stream``
         queue from filling up with rapidly occurring events.
 
-    .. versionchanged:: 0.53
+    .. versionchanged:: 0.52.11
         Enable :attr:`high_water_mark` by default (10 packets) and discard the
         **oldest** packet(s) rather than the newly received packet once a queue
         is full.  Only the ``data`` queue has a consumer, so the remaining
         queues would otherwise either grow without bound or stay full forever
         (dropping every new packet).
 
-    .. versionchanged:: 0.55.1
+    .. versionchanged:: 0.52.12
         Add a queue for :attr:`nadamq.NadaMq.PACKET_TYPES.NACK` packets (with
         the same ring-buffer semantics as the other queues) and send the
         corresponding ``nack-received``/``nack-full`` signals.  ``NACK``
@@ -313,7 +313,7 @@ class PacketQueueManager:
         .. versionchanged:: 0.52
             Improved performance by processing data in chunks and reducing object creation.
 
-        .. versionchanged:: 0.54.1
+        .. versionchanged:: 0.52.11
             Feed the parser 1-byte ``bytes`` slices rather than 1-element
             ``numpy`` slices, and push the packet returned by
             :meth:`nadamq.NadaMq.cPacketParser.parse` directly instead of
@@ -322,7 +322,7 @@ class PacketQueueManager:
             allocated a second parser *per packet*, and the ``numpy`` slice
             allocated an array *per byte*.  Parsed packets are unchanged.
 
-        .. versionchanged:: 0.55.1
+        .. versionchanged:: 0.52.12
             Feed the parser whole **chunks** and resume at
             :attr:`nadamq.NadaMq.cPacketParser.bytes_consumed`, rather than
             one byte at a time.  ``parse()`` returns as soon as a packet
