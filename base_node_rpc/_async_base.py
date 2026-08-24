@@ -3,11 +3,13 @@ import serial
 import blinker
 import asyncio
 import logging
+import struct
 import threading
+import itertools
 import asyncserial
 import json_tricks
 
-from typing import Optional, Dict, Any
+from typing import Optional, Dict, Any, Tuple
 
 import numpy as np
 import pandas as pd
@@ -15,10 +17,19 @@ import functools as ft
 import serial_device as sd
 
 from logging_helpers import _L
-from nadamq.NadaMq import (cPacket, cPacketParser, PACKET_TYPES,
+from nadamq.NadaMq import (cPacket, cPacketParser, FLAGS, PACKET_TYPES,
                           PACKET_NAME_BY_TYPE)
 
-from .queue import _header_only_packet
+# N.B. importing `.queue` also installs the `json_tricks` decoder-hook
+# signature cache (see `_install_json_tricks_hook_cache()`), which both this
+# module and `PacketQueueManager` rely on to decode ``STREAM`` event payloads
+# at a reasonable cost.
+#
+# N.B. `_header_only_packet` is no longer *called* from this module (the parser
+# completes ``ACK``/``NACK`` packets itself, and data is fed to it in chunks
+# rather than one byte at a time); it is re-exported here for backwards
+# compatibility with code that imports it from this module.
+from .queue import _header_only_packet  # noqa: F401
 
 __all__ = ['read_packet', '_read_device_id', '_available_devices',
            '_async_serial_keepalive', 'AsyncSerialMonitor',
@@ -30,6 +41,76 @@ ID_REQUEST = cPacket(type_=PACKET_TYPES.ID_REQUEST).tobytes()
 class ParseError(Exception):
     """Raised when there is an error parsing a packet."""
     pass
+
+
+def _serialized_iuid_offset() -> int:
+    """
+    Byte offset of the ``IUID`` field within a serialized NadaMQ packet.
+
+    Derived from :meth:`nadamq.NadaMq.cPacket.tobytes` rather than hard coded,
+    so that a change to the wire format cannot silently turn IUID stamping
+    into payload corruption.
+
+    Returns
+    -------
+    int
+        Offset (in bytes) of the big-endian ``uint16`` ``IUID`` field.
+    """
+    zero = cPacket(type_=PACKET_TYPES.ACK, iuid=0x0000).tobytes()
+    marked = cPacket(type_=PACKET_TYPES.ACK, iuid=0xA5C3).tobytes()
+    if len(zero) == len(marked):
+        differing = [i for i, (a, b) in enumerate(zip(zero, marked)) if a != b]
+        if (differing and
+                differing == list(range(differing[0],
+                                        differing[0] + _IUID_SIZE))):
+            return differing[0]
+    logger = _L()
+    logger.warning('Could not derive the IUID offset from a serialized '
+                   'packet; falling back to the documented offset.')
+    return len(FLAGS.START)
+
+
+#: Width (in bytes) of the ``IUID`` field on the wire.
+_IUID_SIZE = 2
+#: Largest representable ``IUID``.  ``IUID`` 0 is reserved to mean "not
+#: correlated" (it is what a legacy driver sends and a legacy firmware echoes),
+#: so stamped values cycle through ``1..65535``.
+_IUID_MAX = (1 << (8 * _IUID_SIZE)) - 1
+#: Offset of the ``IUID`` field in a serialized packet (``|||`` start flag).
+_IUID_OFFSET = _serialized_iuid_offset()
+#: Pre-compiled ``struct`` for the big-endian ``uint16`` ``IUID`` field.
+_IUID_STRUCT = struct.Struct('>H')
+
+
+def _stamp_iuid(request: bytes, iuid: int) -> bytes:
+    """
+    Return :data:`request` with its ``IUID`` header field set to :data:`iuid`.
+
+    The ``IUID`` is *not* covered by the packet CRC (which is computed over the
+    payload only), so the field can be overwritten in place without
+    re-serializing the packet.
+
+    Parameters
+    ----------
+    request : bytes
+        Serialized NadaMQ request packet.
+    iuid : int
+        Value to write into the ``IUID`` field (``1..65535``).
+
+    Returns
+    -------
+    bytes
+        Request with the stamped ``IUID``, or :data:`request` unchanged if it
+        does not look like a serialized packet.
+    """
+    if (len(request) < _IUID_OFFSET + _IUID_SIZE or
+            not bytes(request[:len(FLAGS.START)]) == FLAGS.START):
+        # Not a serialized NadaMQ packet; leave it exactly as it was passed in
+        # (the caller falls back to legacy, FIFO, request/response matching).
+        return request
+    stamped = bytearray(request)
+    _IUID_STRUCT.pack_into(stamped, _IUID_OFFSET, iuid)
+    return bytes(stamped)
 
 
 #: Attribute used to stash bytes that were read from a serial device but not
@@ -79,6 +160,11 @@ async def read_packet(serial_: serial.Serial) -> Optional[cPacket]:
         completed packet for the next call, rather than passing the whole read
         chunk to a single ``parse()`` call (which discarded everything after
         the first completed packet).
+    .. versionchanged:: 0.55.1
+        Feed the parser whole chunks and use
+        :attr:`nadamq.NadaMq.cPacketParser.bytes_consumed` to determine the
+        remainder to stash, rather than feeding (and slicing) one byte at a
+        time.  The stashed remainder is identical, at a fraction of the cost.
     """
     parser = cPacketParser()
     # Start with any bytes left over from a previous call, i.e., the remainder
@@ -103,22 +189,38 @@ async def read_packet(serial_: serial.Serial) -> Optional[cPacket]:
                     return None
                 pending = bytes(character)
 
-            # Feed the parser one byte at a time.  N.B. the whole chunk **must
-            # not** be passed to a single `parse()` call: that call returns as
-            # soon as a packet completes, discarding the rest of the chunk --
-            # so, e.g., a ``STREAM`` event arriving in the same read as the
+            # Feed the parser whole chunks, resuming at `bytes_consumed`.
+            # N.B. a `parse()` call returns as soon as a packet completes and
+            # does **not** parse the rest of the chunk -- so, e.g., a
+            # ``STREAM`` event arriving in the same read as the
             # ``ID_RESPONSE`` being waited for would destroy the
-            # ``ID_RESPONSE``.
-            for i in range(len(pending)):
-                result = parser.parse(pending[i:i + 1])
+            # ``ID_RESPONSE`` unless the remainder is retained.
+            # `bytes_consumed` gives exactly that remainder.
+            #
+            # N.B. `reset()` is **not** called on `parser.error` here: the
+            # state machine resets itself internally after an error, and
+            # `error` describes the whole call rather than its last byte, so
+            # an unconditional reset would discard a packet left partially
+            # parsed at the end of the chunk.
+            while pending:
+                result = parser.parse(pending)
+                consumed = parser.bytes_consumed
+                if not consumed:
+                    # Defensive: `parse()` consumes at least one byte of any
+                    # non-empty input, so this cannot normally happen.
+                    _L().warning('Packet parser consumed no input; discarding '
+                                 f'{len(pending)} byte(s).')
+                    break
+                remainder = pending[consumed:]
                 if result is not False:
                     # Retain the trailing bytes of the chunk so the packet(s)
                     # behind this one are not lost with the parser state.
-                    _set_pending_bytes(serial_, pending[i + 1:])
+                    _set_pending_bytes(serial_, remainder)
                     return result
+                pending = remainder
                 if parser.error:
-                    _L().debug('Error parsing packet, resetting parser')
-                    parser.reset()
+                    _L().debug('Error parsing packet; parser recovered and '
+                               'continued with the remaining bytes')
             pending = b''
     except Exception:
         _L().error('Fatal error in read_packet', exc_info=True)
@@ -358,7 +460,7 @@ async def _async_serial_keepalive(
                             await asyncio.sleep(.01)
                     
                     _L().info(f'Disconnected from {port}')
-                    
+
             except serial.SerialException as e:
                 _L().debug(f"Serial exception while connecting to port: {e}")
                 warned = True
@@ -366,6 +468,19 @@ async def _async_serial_keepalive(
                 _L().error("Unexpected error during serial connection",
                            exc_info=True)
             finally:
+                # Drop the reference to the (now closed) serial device *before*
+                # announcing the disconnect.  Otherwise `parent.device` would
+                # keep pointing at the dead `AsyncSerial` for the whole gap
+                # between a disconnect and the next successful reconnect, so a
+                # consumer polling `monitor.device` from the `disconnected`
+                # signal handler could not tell "no device" from "device that
+                # is about to be replaced".
+                #
+                # N.B. this runs on *every* path out of the connection attempt
+                # (normal inner-loop exit, hot-unplug, open failure, stop
+                # request), mirroring the guarantee that `disconnected_event`
+                # is always set.
+                parent.device = None
                 # Always set disconnected_event after exiting context manager
                 parent.disconnected_event.set()
                 parent.connected_event.clear()
@@ -381,7 +496,10 @@ async def _async_serial_keepalive(
             await asyncio.sleep(.01)
 
     finally:
-        # Ensure events are in correct state when exiting
+        # Ensure events are in correct state when exiting.  N.B. clear the
+        # device reference *before* setting `disconnected_event`, which fires
+        # the `disconnected` signal (see above).
+        parent.device = None
         parent.connected_event.clear()
         parent.disconnected_event.set()
         _L().info(f'Stopped monitoring {port}')
@@ -548,7 +666,59 @@ class BaseNodeSerialMonitor(AsyncSerialMonitor):
         super().__init__(*args, **kwargs)
         self._request_queue = None
         self._request_lock = None
+        # Source of per-monitor request ``IUID``s (see :meth:`_next_iuid`).
+        # N.B. `itertools.count()` is *not* atomic across threads on every
+        # implementation, and `request()`/`_submit_request()` may be called
+        # from any thread, so hand out values under a plain `threading.Lock`
+        # (uncontended, so effectively free).
+        self._iuid_counter = itertools.count()
+        self._iuid_lock = threading.Lock()
         self.signals = blinker.Namespace()
+
+    def _next_iuid(self) -> int:
+        """
+        Return the next request ``IUID``.
+
+        Cycles through ``1..65535``, wrapping from 65535 back to 1.  ``IUID``
+        0 is **never** returned: it is reserved to mean "not correlated", i.e.
+        what a legacy driver stamps and what a legacy firmware echoes.
+
+        Returns
+        -------
+        int
+            Request identifier in the range ``1..65535``.
+
+        .. versionadded:: 0.55.1
+        """
+        with self._iuid_lock:
+            return next(self._iuid_counter) % _IUID_MAX + 1
+
+    def _stamp_request(self, request: bytes) -> Tuple[bytes, int]:
+        """
+        Stamp a fresh ``IUID`` into a serialized request packet.
+
+        Parameters
+        ----------
+        request : bytes
+            Serialized NadaMQ request packet (as produced by the generated
+            proxy classes, which always stamp ``IUID`` 0).
+
+        Returns
+        -------
+        (bytes, int)
+            Request with the stamped ``IUID``, and the ``IUID`` that was
+            stamped.  The ``IUID`` is ``0`` if :data:`request` could not be
+            stamped (i.e. it is not a serialized packet), in which case
+            :meth:`arequest` falls back to legacy FIFO response matching.
+
+        .. versionadded:: 0.55.1
+        """
+        iuid = self._next_iuid()
+        stamped = _stamp_iuid(request, iuid)
+        if stamped is request:
+            # Left unchanged, i.e. not a serialized packet.
+            return request, 0
+        return stamped, iuid
 
     def listen(self) -> None:
         """Start listening for serial data and process packets."""
@@ -661,8 +831,16 @@ class BaseNodeSerialMonitor(AsyncSerialMonitor):
         the never-scheduled coroutine so it does not emit a ``coroutine ...
         was never awaited`` :class:`RuntimeWarning` during garbage collection,
         and raise a clear error instead.
+
+        .. versionchanged:: 0.55.1
+            Stamp a fresh ``IUID`` into the request so that :meth:`arequest`
+            can correlate the response with it.  N.B. this happens **per
+            call**, so the retry issued by :meth:`request` after a timeout
+            carries a *new* ``IUID`` -- which is what lets the late response to
+            the timed-out attempt be recognized and discarded.
         """
-        coro = self.arequest(request)
+        request, iuid = self._stamp_request(request)
+        coro = self.arequest(request, iuid=iuid)
         try:
             return asyncio.run_coroutine_threadsafe(coro, loop=self.loop)
         except (RuntimeError, AttributeError) as exception:
@@ -670,9 +848,10 @@ class BaseNodeSerialMonitor(AsyncSerialMonitor):
             raise RuntimeError('Serial monitor event loop is not running; '
                                'cannot send request.') from exception
 
-    async def arequest(self, request: bytes, **kwargs: Any) -> cPacket:
+    async def arequest(self, request: bytes, iuid: Optional[int] = None,
+                       **kwargs: Any) -> cPacket:
         """
-        Request device identifier from a serial device.
+        Send a request to the serial device and wait for its response packet.
 
         .. note::
             Asynchronous co-routine.
@@ -681,6 +860,12 @@ class BaseNodeSerialMonitor(AsyncSerialMonitor):
         ----------
         request : bytes
             Request to send.
+        iuid : int, optional
+            ``IUID`` stamped into :data:`request` (see
+            :meth:`_stamp_request`), used to correlate the response with the
+            request.  ``None`` (the default) stamps a fresh ``IUID`` here, so
+            that callers using this coroutine directly are correlated too;
+            ``0`` disables correlation (legacy FIFO matching).
         timeout : float, optional
             Number of seconds to wait for response from serial device.
         **kwargs
@@ -691,7 +876,20 @@ class BaseNodeSerialMonitor(AsyncSerialMonitor):
         -------
         cPacket
             Response packet.
+
+        Version log
+        -----------
+        .. versionchanged:: 0.55.1
+            Correlate the response with the request by ``IUID`` where the
+            firmware supports it.  A response whose ``IUID`` matches neither
+            the request nor ``0`` is a *late* response to an earlier,
+            timed-out request; it is discarded rather than mis-delivered as
+            the response to this one.  Firmware that does not echo the request
+            ``IUID`` (i.e. every build predating this change) replies with
+            ``IUID`` 0, which keeps today's FIFO semantics exactly.
         """
+        if iuid is None:
+            request, iuid = self._stamp_request(request)
         # Serialize requests so that each request/response pair is matched up
         # one-to-one.  Using `async with` guarantees the lock is released even
         # if this coroutine is cancelled while waiting for a response (which is
@@ -721,8 +919,44 @@ class BaseNodeSerialMonitor(AsyncSerialMonitor):
                              f' {len(stale_packet.data())} bytes) left over '
                              'from a timed-out request')
 
-            await self.device.write(request)
-            return await self._request_queue.get()
+            # N.B. `self.device` is `None` while no serial device is connected
+            # (in particular in the gap between a disconnect and the next
+            # successful reconnect -- see `_async_serial_keepalive()`).  Raise
+            # a serial error naming the cause rather than letting a bare
+            # `AttributeError: 'NoneType' object has no attribute 'write'`
+            # escape.
+            device = self.device
+            if device is None:
+                raise serial.SerialException(
+                    'No serial device is currently connected; cannot send '
+                    'request.')
+            await device.write(request)
+
+            while True:
+                packet = await self._request_queue.get()
+                if not iuid:
+                    # Request could not be stamped (not a serialized packet),
+                    # so there is nothing to correlate against: fall back to
+                    # FIFO matching.
+                    return packet
+                response_iuid = getattr(packet, 'iuid_', 0)
+                if response_iuid == iuid:
+                    # Firmware echoed the request `IUID`: this is *provably*
+                    # the response to this request.
+                    return packet
+                if response_iuid == 0:
+                    # Legacy firmware (does not echo the request `IUID`).
+                    # Match FIFO, exactly as before -- the stale-response drain
+                    # above is what keeps this path in step.
+                    return packet
+                # A response to an *earlier* request that timed out and was
+                # re-sent.  Delivering it here would return the wrong command's
+                # result, so discard it and keep waiting.  N.B. the total wait
+                # is still bounded by the caller's `future.result(timeout)`.
+                _L().debug('Discarding late response packet (IUID '
+                           f'{response_iuid}, expected {iuid}; type='
+                           f'{PACKET_NAME_BY_TYPE.get(packet.type_, "?")}) '
+                           'left over from a timed-out request')
 
     async def read_packets(self) -> None:
         """Read and process packets from the serial device."""
@@ -767,8 +1001,17 @@ class BaseNodeSerialMonitor(AsyncSerialMonitor):
                                   exc_info=True)
             elif packet_.type_ == PACKET_TYPES.DATA:
                 await self._request_queue.put(packet_)
+            elif packet_.type_ == PACKET_TYPES.NACK:
+                # N.B. a ``NACK`` is **not** put on `_request_queue`: it is not
+                # a response, and delivering it as one would desynchronize the
+                # request/response pairing in :meth:`arequest`.  It is surfaced
+                # through the `nack-received` signal below instead, so that a
+                # rejected request is distinguishable from an unanswered one.
+                L.debug('NACK received from device (request rejected); '
+                        'sending `nack-received` signal.')
 
-            for packet_type_i in ('data', 'ack', 'stream', 'id_response'):
+            for packet_type_i in ('data', 'ack', 'nack', 'stream',
+                                  'id_response'):
                 if packet_.type_ == getattr(PACKET_TYPES, packet_type_i.upper()):
                     self.signals.signal(f'{packet_type_i}-received').send(packet_)
 
@@ -813,30 +1056,41 @@ class BaseNodeSerialMonitor(AsyncSerialMonitor):
                     # its `repr` for every read is not free.
                     if L.isEnabledFor(logging.DEBUG):
                         L.debug(f'read: `{data}`')
-                    # Feed the parser one byte at a time.  N.B. the whole
-                    # chunk **must not** be passed in a single `parse()` call:
-                    # that call returns as soon as a packet completes,
-                    # discarding the rest of the chunk.  1-byte `bytes` slices
-                    # are used rather than `numpy` slices (which allocated an
-                    # array per byte), and the packet returned by `parse()` is
-                    # dispatched directly rather than being serialized and
-                    # parsed a second time (which re-ran the CRC over every
-                    # payload and allocated a second parser per packet).
+                    # Feed the parser whole chunks, resuming at the byte after
+                    # the one that completed a packet.  N.B. a `parse()` call
+                    # returns as soon as a packet completes and does **not**
+                    # parse the rest of the chunk, so the remainder must be
+                    # fed back in -- `bytes_consumed` says exactly where to
+                    # resume.  The packet returned by `parse()` is dispatched
+                    # directly rather than being serialized and parsed a
+                    # second time (which re-ran the CRC over every payload and
+                    # allocated a second parser per packet).
+                    #
+                    # N.B. `reset()` **must not** be called here (neither
+                    # after a completed packet nor on `parser.error`): the
+                    # state machine already resets itself internally in both
+                    # cases, and `error` describes the whole call rather than
+                    # its last byte -- so an unconditional reset would discard
+                    # a packet left partially parsed at the end of the chunk.
                     parse = parser.parse
-                    for i in range(len(data)):
-                        result = parse(data[i:i + 1])
+                    pending = data
+                    while pending:
+                        result = parse(pending)
+                        consumed = parser.bytes_consumed
+                        if not consumed:
+                            # Defensive: `parse()` consumes at least one byte
+                            # of any non-empty input, so this cannot normally
+                            # happen.  Break rather than spin forever.
+                            L.warning('Packet parser consumed no input; '
+                                      f'discarding {len(pending)} byte(s).')
+                            break
+                        pending = pending[consumed:]
                         if result is not False:
                             await on_packet_received(result)
-                            parser.reset()
-                        elif parser.error:
-                            parser.reset()
-                        else:
-                            # Header-only packets (i.e., ``ACK``/``NACK``) are
-                            # not completed by the parser when fed one byte at
-                            # a time.
-                            header_only_packet = _header_only_packet(parser)
-                            if header_only_packet is not None:
-                                await on_packet_received(header_only_packet)
+                        elif parser.error and L.isEnabledFor(logging.DEBUG):
+                            L.debug('Parse error within read chunk; parser '
+                                    'recovered and continued with the '
+                                    'remaining bytes.')
             except Exception:
                 if self.stop_event.is_set():
                     L.debug('Stop event set during exception, exiting')

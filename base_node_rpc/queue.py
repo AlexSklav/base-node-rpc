@@ -4,9 +4,10 @@ import queue
 
 import blinker
 import logging
+import functools
 import json_tricks
 
-from typing import Dict, Optional, Union
+from typing import Callable, Dict, Optional, Union
 from datetime import datetime
 from threading import Thread
 
@@ -18,6 +19,128 @@ logger = logging.getLogger(name=__name__)
 # Prevent warning about potential future changes to Numpy scalar encoding behaviour.
 json_tricks.NumpyEncoder.SHOW_SCALAR_WARNING = False
 
+
+def _memoize_by_argument(func: Callable, maxsize: int = 256) -> Callable:
+    """
+    Memoize a **pure**, single-argument function of a callable.
+
+    Falls back to the uncached implementation for an unhashable argument, so
+    that behaviour (including any exception raised by :data:`func`) is
+    unchanged in every case.
+    """
+    cached = functools.lru_cache(maxsize=maxsize)(func)
+
+    @functools.wraps(func)
+    def wrapper(arg):
+        try:
+            hash(arg)
+        except TypeError:
+            # Unhashable argument cannot be used as an `lru_cache` key.
+            return func(arg)
+        return cached(arg)
+
+    wrapper.cache_info = cached.cache_info
+    wrapper.cache_clear = cached.cache_clear
+    # Marker used to make installation idempotent (see
+    # :func:`_install_json_tricks_hook_cache`).
+    wrapper._memoized_func = func
+    return wrapper
+
+
+#: Whether the ``json_tricks`` decoder-hook signature cache has been installed.
+_JSON_TRICKS_HOOK_CACHE_INSTALLED = False
+
+
+def _install_json_tricks_hook_cache() -> bool:
+    """
+    Cache ``json_tricks`` decoder/encoder hook argument-name discovery.
+
+    ``json_tricks.decoders.TricksPairHook.__init__()`` -- which is constructed
+    **once per** :func:`json_tricks.loads` call -- wraps *every* object-pairs
+    hook in :func:`json_tricks.utils.filtered_wrapper`, which in turn calls
+    :func:`json_tricks.utils.get_arg_names`, which runs
+    :func:`inspect.signature` on the hook.  With the 11 default hooks, that is
+    11 signature inspections **per decoded packet**, which dominates decoding
+    of the small JSON payloads carried by ``STREAM`` event packets (~70 us per
+    event, versus ~1 us for :func:`json.loads`).
+
+    Both functions are pure functions of the hook they are passed, so their
+    results are memoized here.  ``json_tricks.decoders`` and
+    ``json_tricks.encoders`` bind ``filtered_wrapper`` by name at *import*
+    time, so each module reference must be replaced separately.
+
+    Decoded output is unaffected: the same wrapper (closing over the same hook
+    and the same set of argument names) is returned, rather than an equivalent
+    one rebuilt from scratch.
+
+    Returns
+    -------
+    bool
+        ``True`` if the cache is installed.
+
+    .. versionadded:: 0.55.1
+    """
+    global _JSON_TRICKS_HOOK_CACHE_INSTALLED
+
+    if _JSON_TRICKS_HOOK_CACHE_INSTALLED:
+        return True
+
+    try:
+        from json_tricks import decoders as _jt_decoders
+        from json_tricks import encoders as _jt_encoders
+        from json_tricks import utils as _jt_utils
+
+        get_arg_names = getattr(_jt_utils, 'get_arg_names', None)
+        filtered_wrapper = getattr(_jt_utils, 'filtered_wrapper', None)
+        if not callable(get_arg_names) or not callable(filtered_wrapper):
+            # `json_tricks` internals do not match expectations; leave
+            # untouched.
+            logger.debug('`json_tricks` does not expose the expected '
+                         '`get_arg_names`/`filtered_wrapper` helpers; '
+                         'decoder hook cache not installed.')
+            return False
+
+        originals = {'utils.get_arg_names': (_jt_utils, 'get_arg_names',
+                                             get_arg_names)}
+        for module in (_jt_utils, _jt_decoders, _jt_encoders):
+            if getattr(module, 'filtered_wrapper', None) is filtered_wrapper:
+                originals[f'{module.__name__}.filtered_wrapper'] = (
+                    module, 'filtered_wrapper', filtered_wrapper)
+
+        if getattr(get_arg_names, '_memoized_func', None) is None:
+            _jt_utils.get_arg_names = _memoize_by_argument(get_arg_names)
+        cached_filtered_wrapper = _memoize_by_argument(filtered_wrapper)
+        for module, name, _ in list(originals.values()):
+            if name == 'filtered_wrapper':
+                setattr(module, name, cached_filtered_wrapper)
+
+        # Smoke test the patched decoder.  If anything is amiss, restore every
+        # original attribute and leave `json_tricks` exactly as it was found.
+        try:
+            if json_tricks.loads('{"__test__": [1, 2.5, null, true]}') != {
+                    '__test__': [1, 2.5, None, True]}:
+                raise RuntimeError('unexpected decode result')
+        except Exception:
+            for module, name, original in originals.values():
+                setattr(module, name, original)
+            logger.debug('`json_tricks` decoder hook cache failed its smoke '
+                         'test; reverted.', exc_info=True)
+            return False
+    except Exception:
+        logger.debug('Could not install `json_tricks` decoder hook cache.',
+                     exc_info=True)
+        return False
+
+    _JSON_TRICKS_HOOK_CACHE_INSTALLED = True
+    logger.debug('Installed `json_tricks` decoder hook signature cache.')
+    return True
+
+
+# Install at import time, so that both `STREAM` event dispatch sites
+# (:meth:`PacketQueueManager.parse` and
+# :meth:`base_node_rpc._async_base.BaseNodeSerialMonitor.read_packets`) benefit.
+_install_json_tricks_hook_cache()
+
 # Packet types that consist of a header *only*, i.e., no length, payload or
 # CRC fields (see NadaMQ packet protocol).
 _HEADER_ONLY_PACKET_TYPES = (PACKET_TYPES.ACK, PACKET_TYPES.NACK)
@@ -27,6 +150,7 @@ _HEADER_ONLY_PACKET_TYPES = (PACKET_TYPES.ACK, PACKET_TYPES.NACK)
 _QUEUE_NAME_BY_PACKET_TYPE = {
     PACKET_TYPES.DATA: 'data',
     PACKET_TYPES.ACK: 'ack',
+    PACKET_TYPES.NACK: 'nack',
     PACKET_TYPES.STREAM: 'stream',
     PACKET_TYPES.ID_RESPONSE: 'id_response',
 }
@@ -119,11 +243,21 @@ class PacketQueueManager:
         is full.  Only the ``data`` queue has a consumer, so the remaining
         queues would otherwise either grow without bound or stay full forever
         (dropping every new packet).
+
+    .. versionchanged:: 0.55.1
+        Add a queue for :attr:`nadamq.NadaMq.PACKET_TYPES.NACK` packets (with
+        the same ring-buffer semantics as the other queues) and send the
+        corresponding ``nack-received``/``nack-full`` signals.  ``NACK``
+        packets were previously parsed and then silently discarded, so a device
+        rejecting a request was indistinguishable from a device not responding
+        at all.
     """
 
     def __init__(self, high_water_mark: Optional[int] = 10):
         self._packet_parser = cPacketParser()
-        packet_types = ['data', 'ack', 'stream', 'id_response']
+        # N.B. keep in sync with `_QUEUE_NAME_BY_PACKET_TYPE`, which maps a
+        # received packet on to the queue it is pushed to.
+        packet_types = ['data', 'ack', 'nack', 'stream', 'id_response']
         # Signals to connect to indicating a packet received or when the queue is full.
         self.signals = blinker.Namespace()
         # Note: a *separate* queue is required for each packet type (a single
@@ -188,6 +322,15 @@ class PacketQueueManager:
             allocated a second parser *per packet*, and the ``numpy`` slice
             allocated an array *per byte*.  Parsed packets are unchanged.
 
+        .. versionchanged:: 0.55.1
+            Feed the parser whole **chunks** and resume at
+            :attr:`nadamq.NadaMq.cPacketParser.bytes_consumed`, rather than
+            one byte at a time.  ``parse()`` returns as soon as a packet
+            completes and now reports exactly how much of the chunk it
+            consumed, so the remainder can simply be fed back in -- at a
+            fraction of the per-byte call overhead.  Parsed packets, their
+            order, and every signal are unchanged.
+
         Parameters
         ----------
         data : str or bytes
@@ -198,12 +341,17 @@ class PacketQueueManager:
         packets = []
         current_time = datetime.now()  # Get time once instead of for each packet
 
+        data_bytes = None
         if isinstance(data, (str, bytes)):
             try:
                 # Process data as bytes (`str` is encoded as UTF-8 first).
                 data_bytes = data if isinstance(data, bytes) else data.encode()
             except (TypeError, AttributeError):
-                # Handle individual characters if needed
+                # Handle individual characters if needed.  Each element is
+                # normalized to bytes and the result is concatenated, so that
+                # the parser is fed a single chunk below (exactly as for the
+                # `bytes`/`str` case).
+                converted = []
                 for c in data:
                     # Handle different input types appropriately
                     if isinstance(c, int):
@@ -222,39 +370,40 @@ class PacketQueueManager:
                         except (TypeError, ValueError):
                             logger.warning(f"Skipping unparseable input of type {type(c)}")
                             continue
+                    converted.append(c_bytes)
+                data_bytes = b''.join(converted)
 
-                    result = self._packet_parser.parse(c_bytes)
-                    if result is not False:
-                        # A full packet has been parsed.
-                        packets.append((current_time, result))
-                        self._packet_parser.reset()
-                    elif self._packet_parser.error:
-                        self._packet_parser.reset()
-                    else:
-                        # Header-only packets (i.e., ``ACK``/``NACK``) are not
-                        # completed by the parser when fed one byte at a time.
-                        header_only_packet = _header_only_packet(self._packet_parser)
-                        if header_only_packet is not None:
-                            packets.append((current_time, header_only_packet))
-            else:
-                # Feed the parser one byte at a time.  N.B. a whole chunk
-                # **must not** be passed in a single `parse()` call: that call
-                # returns as soon as a packet completes, discarding the rest of
-                # the chunk.
-                parse = self._packet_parser.parse
-                for i in range(len(data_bytes)):
-                    result = parse(data_bytes[i:i + 1])
-                    if result is not False:
-                        packets.append((current_time, result))
-                        self._packet_parser.reset()
-                    elif self._packet_parser.error:
-                        self._packet_parser.reset()
-                    else:
-                        # Header-only packets (i.e., ``ACK``/``NACK``) are not
-                        # completed by the parser when fed one byte at a time.
-                        header_only_packet = _header_only_packet(self._packet_parser)
-                        if header_only_packet is not None:
-                            packets.append((current_time, header_only_packet))
+        if data_bytes:
+            # Feed the parser whole chunks, resuming at the byte after the one
+            # that completed a packet.  N.B. `parse()` returns as soon as a
+            # packet completes, so the *remainder* of the chunk must be fed
+            # back in -- `bytes_consumed` says exactly where to resume.
+            #
+            # N.B. `reset()` **must not** be called here (neither after a
+            # completed packet nor on `parser.error`): the state machine
+            # already resets itself internally in both cases, and `error`
+            # describes the whole call rather than its last byte -- so an
+            # unconditional reset would discard a packet that is partially
+            # parsed at the end of the chunk.
+            parser = self._packet_parser
+            parse = parser.parse
+            debug = logger.isEnabledFor(logging.DEBUG)
+            while data_bytes:
+                result = parse(data_bytes)
+                consumed = parser.bytes_consumed
+                if not consumed:
+                    # Defensive: `parse()` consumes at least one byte of any
+                    # non-empty input, so this cannot normally happen.  Break
+                    # rather than spin forever on a parser that stalls.
+                    logger.warning('Packet parser consumed no input; '
+                                   'discarding %d byte(s).', len(data_bytes))
+                    break
+                data_bytes = data_bytes[consumed:]
+                if result is not False:
+                    packets.append((current_time, result))
+                elif parser.error and debug:
+                    logger.debug('Parse error within chunk; parser recovered '
+                                 'and continued with the remaining bytes.')
 
         # Process collected packets
         for t, p in packets:
