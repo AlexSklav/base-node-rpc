@@ -34,6 +34,34 @@ public:
 };
 
 
+/* Write a ``DATA`` response, echoing the ``IUID`` of the request packet so
+ * that a driver can correlate each response with the request that produced it
+ * (rather than relying on responses arriving strictly in order, which breaks
+ * as soon as a request times out and is re-sent while the device is still
+ * working on it).
+ *
+ * N.B. a request carrying ``IUID`` 0 -- i.e. one sent by any driver predating
+ * this change -- echoes 0 back, so old drivers see byte-for-byte identical
+ * responses.
+ *
+ * The overload pair below picks the 3-argument ``write_f_`` where the receiver
+ * provides one (e.g. `serial_write_packet`) and falls back to the 1-argument
+ * form otherwise (e.g. `i2c_write_packet`, where the response is addressed by
+ * I2C address rather than by IUID).  ..versionadded:: 0.55.1 */
+template <typename WriteF>
+inline auto write_data_response(WriteF &write_f, UInt8Array data, uint16_t iuid,
+                                int /* overload rank */)
+    -> decltype(write_f(data, (uint8_t)Packet::packet_type::DATA, iuid)) {
+  write_f(data, (uint8_t)Packet::packet_type::DATA, iuid);
+}
+
+template <typename WriteF>
+inline void write_data_response(WriteF &write_f, UInt8Array data,
+                                uint16_t /* iuid */, long /* overload rank */) {
+  write_f(data);
+}
+
+
 template <typename Receiver_, size_t PacketSize, uint32_t TIMEOUT_MS=5000>
 class Handler {
 public:
@@ -110,8 +138,9 @@ public:
         // Process request packet using command processor.
         result = process_packet_with_processor(packet_, command_processor);
         if (result.data == NULL) { result.length = 0; }
-        // Write response packet.
-        receiver_.write_f_(result);
+        // Write response packet, echoing the request IUID (see
+        // `write_data_response` above).
+        write_data_response(receiver_.write_f_, result, packet_.iuid_, 0);
 #if defined(DEVICE_ID_RESPONSE)
       } else if (packet_.type() == Packet::packet_type::ID_REQUEST) {
         /* ID information was requested.
