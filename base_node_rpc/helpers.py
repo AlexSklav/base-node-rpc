@@ -107,7 +107,10 @@ def generate_protobuf_python_code(lib_options: Dict) -> None:
 
     for proto_path in sketch_dir.abspath().files('*.proto'):
         proto_name = proto_path.namebase
-        pb_code = npb.compile_pb(proto_path)
+        # Scope the registered descriptor as `<module_name>/<name>.proto` so
+        # packages that each define e.g. `config.proto` can coexist in one
+        # process (the protobuf descriptor pool keys by file name).
+        pb_code = npb.compile_pb(proto_path, scope=module_name)
         output_path = src_dir.joinpath(module_name, f'{proto_name}.py').abspath()
         output_path.write_text(pb_code['python'])
 
