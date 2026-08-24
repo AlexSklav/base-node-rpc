@@ -637,8 +637,7 @@ class BaseNodeSerialMonitor(AsyncSerialMonitor):
         """
         max_retries = kwargs.pop('max_retries', 3)
         retry_count = 0
-        future = asyncio.run_coroutine_threadsafe(self.arequest(request),
-                                                  loop=self.loop)
+        future = self._submit_request(request)
 
         while retry_count < max_retries:
             try:
@@ -650,8 +649,26 @@ class BaseNodeSerialMonitor(AsyncSerialMonitor):
                     _L().warning(f'Max retries ({max_retries}) reached waiting for response')
                     raise
                 _L().debug(f'Retry {retry_count}/{max_retries} after timeout: {args}')
-                future = asyncio.run_coroutine_threadsafe(self.arequest(request),
-                                                       loop=self.loop)
+                future = self._submit_request(request)
+
+    def _submit_request(self, request: bytes):
+        """
+        Schedule :meth:`arequest` on the monitor loop from any thread.
+
+        Returns a :class:`concurrent.futures.Future`.  If the loop is closed,
+        not running, or was never created (e.g., after :meth:`stop`, or during
+        interpreter shutdown when a ``__del__`` issues a final command), close
+        the never-scheduled coroutine so it does not emit a ``coroutine ...
+        was never awaited`` :class:`RuntimeWarning` during garbage collection,
+        and raise a clear error instead.
+        """
+        coro = self.arequest(request)
+        try:
+            return asyncio.run_coroutine_threadsafe(coro, loop=self.loop)
+        except (RuntimeError, AttributeError) as exception:
+            coro.close()
+            raise RuntimeError('Serial monitor event loop is not running; '
+                               'cannot send request.') from exception
 
     async def arequest(self, request: bytes, **kwargs: Any) -> cPacket:
         """
